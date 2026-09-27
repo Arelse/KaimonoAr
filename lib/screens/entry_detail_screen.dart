@@ -1,5 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_type.dart';
 import '../models/entry.dart';
@@ -11,8 +13,9 @@ import 'novel_reader_screen.dart';
 import 'player_screen.dart';
 import 'webview_screen.dart';
 
-const _bgDetail = Color(0xFF0E0909);
-const _bgList = Color(0xFF120406);
+// ---------- Colors ----------
+const _bg = Color(0xFF0E0909);
+const _card = Color(0xFF1C1315);
 const _statsBg = Color(0xFF1A1D24);
 const _statLabel = Color(0xFF828797);
 const _gold = Color(0xFFFBBF24);
@@ -28,6 +31,69 @@ const _gray400 = Color(0xFF9CA3AF);
 const _gray500 = Color(0xFF6B7280);
 const _accent = Color(0xFFFF7B7B);
 const _readDim = Color(0xFF7A6468);
+const _iconBar = Color(0xFFD4D4D8);
+
+// ---------- Exact icon SVGs (from the provided mockups) ----------
+const _svgBack = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+''';
+const _svgCloudDownload = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4 4 4-4"/></svg>
+''';
+const _svgFilter = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+''';
+const _svgMoreDots = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+''';
+const _svgPerson = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+''';
+const _svgPencil = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+''';
+const _svgClock = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+''';
+const _svgStar = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="white"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+''';
+const _svgBookOpen = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+''';
+const _svgCalendarClock = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.25V14"/><circle cx="16" cy="16" r="6"/></svg>
+''';
+const _svgCheckCircle = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+''';
+const _svgCompass = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+''';
+const _svgGitMerge = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+''';
+const _svgChevronDown = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9l-7 7-7-7"/></svg>
+''';
+const _svgDownloadTray = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+''';
+const _svgPlay = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M5.536 21.886a1.004 1.004 0 0 0 1.033-.064l13-9a1 1 0 0 0 0-1.644l-13-9A1 1 0 0 0 5 3v18a1 1 0 0 0 .536.886z"/></svg>
+''';
+const _svgSearch = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+''';
+
+Widget _svgIcon(String svg, {double size = 24, required Color color}) {
+  return SvgPicture.string(
+    svg,
+    width: size,
+    height: size,
+    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+  );
+}
 
 String _fmtNum(double n) => n == n.roundToDouble() ? n.toInt().toString() : n.toString();
 
@@ -63,6 +129,8 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
   List<EntryChunk> _chunks = [];
   bool _loading = true;
   bool _descExpanded = false;
+  bool _newestFirst = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -86,6 +154,31 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$what is coming soon.')),
     );
+  }
+
+  List<EntryChunk> get _sortedAsc {
+    final list = List<EntryChunk>.from(_chunks);
+    list.sort((a, b) => a.number.compareTo(b.number));
+    return list;
+  }
+
+  List<EntryChunk> get _visibleChunks {
+    var list = _sortedAsc;
+    if (_newestFirst) list = list.reversed.toList();
+    final q = _query.trim();
+    if (q.isNotEmpty) {
+      list = list
+          .where((c) => _fmtNum(c.number).contains(q) || c.title.toLowerCase().contains(q.toLowerCase()))
+          .toList();
+    }
+    return list;
+  }
+
+  void _resume() {
+    final asc = _sortedAsc;
+    if (asc.isEmpty) return;
+    final unread = asc.where((c) => !c.read);
+    _openChunk(unread.isNotEmpty ? unread.first : asc.last);
   }
 
   void _openChunk(EntryChunk chunk) {
@@ -125,21 +218,6 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => SourceWebViewScreen(url: url, title: e.title)),
-    );
-  }
-
-  void _openChapterList(Entry e) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _ChapterListScreen(
-          title: e.title,
-          isAnime: e.type == ContentType.anime,
-          chunks: _chunks,
-          onOpen: _openChunk,
-          onRefresh: _load,
-        ),
-      ),
     );
   }
 
@@ -204,104 +282,121 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: _bgDetail,
+        backgroundColor: _bg,
         body: Center(child: CircularProgressIndicator(color: _accent)),
       );
     }
     final e = _details!;
+    final chunkWord = e.type == ContentType.anime ? 'Episode' : 'Chapter';
     final desc = e.description == null ? '' : _stripHtml(e.description!);
-    final hasStats = e.rank != null || e.rating != null || e.saves != null;
+    final items = _visibleChunks;
 
     return Scaffold(
-      backgroundColor: _bgDetail,
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          // Top nav
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.cloud_download_outlined, color: Color(0xFFD4D4D8)),
-                  onPressed: () => _comingSoon('Downloads'),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.filter_alt_outlined, color: Color(0xFFD4D4D8)),
-                  onPressed: () => _openChapterList(e),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz, color: Color(0xFFD4D4D8)),
-                  onSelected: (value) {
-                    if (value == 'refresh') _load();
-                    if (value == 'categories') _openCategoryPicker();
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'refresh', child: Text('Refresh')),
-                    PopupMenuItem(value: 'categories', child: Text('Set categories')),
-                  ],
-                ),
-              ],
+      backgroundColor: _bg,
+      floatingActionButton: SizedBox(
+        width: 58,
+        height: 58,
+        child: Material(
+          color: _accent,
+          borderRadius: BorderRadius.circular(19),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(19),
+            onTap: _chunks.isEmpty ? null : _resume,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Center(child: _svgIcon(_svgPlay, size: 26, color: const Color(0xFF120406))),
             ),
           ),
-          // Header: cover + details
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 115,
-                  height: 160,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
+        ),
+      ),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: _svgIcon(_svgBack, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  child: e.coverUrl != null
-                      ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
-                      : Container(color: const Color(0xFF1F2937)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          e.title,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            height: 1.2,
-                            letterSpacing: -0.3,
+                  const Spacer(),
+                  IconButton(
+                    icon: _svgIcon(_svgCloudDownload, color: _iconBar),
+                    onPressed: () => _comingSoon('Downloads'),
+                  ),
+                  IconButton(
+                    icon: _svgIcon(_svgFilter, color: _iconBar),
+                    tooltip: _newestFirst ? 'Newest first' : 'Oldest first',
+                    onPressed: () => setState(() => _newestFirst = !_newestFirst),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: _svgIcon(_svgMoreDots, color: _iconBar),
+                    onSelected: (value) {
+                      if (value == 'refresh') _load();
+                      if (value == 'categories') _openCategoryPicker();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+                      PopupMenuItem(value: 'categories', child: Text('Set categories')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 115,
+                    height: 160,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: e.coverUrl != null
+                        ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
+                        : Container(color: const Color(0xFF1F2937)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            e.title,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              height: 1.2,
+                              letterSpacing: -0.3,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        if (e.author != null && e.author!.isNotEmpty)
-                          _metaRow(Icons.person_outline, e.author!),
-                        if (e.artist != null && e.artist!.isNotEmpty)
-                          _metaRow(Icons.edit_outlined, e.artist!),
-                        _metaRow(Icons.schedule, _statusLine(e)),
-                      ],
+                          const SizedBox(height: 12),
+                          if (e.author != null && e.author!.isNotEmpty)
+                            _metaRow(_svgPerson, e.author!),
+                          if (e.artist != null && e.artist!.isNotEmpty)
+                            _metaRow(_svgPencil, e.artist!),
+                          _metaRow(_svgClock, _statusLine(e)),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 24),
-          // Stats box
-          if (hasStats)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
+          SliverToBoxAdapter(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(color: _statsBg, borderRadius: BorderRadius.circular(20)),
               child: Row(
@@ -315,7 +410,7 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
                         : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.star, color: _gold, size: 14),
+                              _svgIcon(_svgStar, size: 14, color: _gold),
                               const SizedBox(width: 4),
                               Text(e.rating!.toStringAsFixed(2),
                                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _gold)),
@@ -327,104 +422,232 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
                 ],
               ),
             ),
-          const SizedBox(height: 24),
-          // Action buttons
-          Consumer(
-            builder: (context, ref, _) {
-              final library = ref.watch(libraryManagerProvider.notifier);
-              ref.watch(libraryManagerProvider);
-              final fav = library.isFavorite(widget.sourceId, widget.entry.id);
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _actionButton(
-                      icon: Icons.menu_book_outlined,
-                      label: fav ? 'In Library' : 'Add to Library',
-                      fg: fav ? _libraryFg : _defaultBtnFg,
-                      bg: fav ? _libraryBg : _defaultBtnBg,
-                      onTap: () => library.toggle(e),
-                    ),
-                    _actionButton(
-                      icon: null,
-                      customIcon: _soonIcon(_defaultBtnFg),
-                      label: 'Soon',
-                      fg: _defaultBtnFg,
-                      bg: _defaultBtnBg,
-                      onTap: () => _comingSoon('This'),
-                    ),
-                    _actionButton(
-                      icon: Icons.check_circle_outline,
-                      label: 'Trackers',
-                      fg: _trackerFg,
-                      bg: _trackerBg,
-                      onTap: () => _comingSoon('Trackers'),
-                    ),
-                    _actionButton(
-                      icon: Icons.explore_outlined,
-                      label: 'WebView',
-                      fg: _defaultBtnFg,
-                      bg: _defaultBtnBg,
-                      onTap: () => _openWebView(e),
-                    ),
-                    _actionButton(
-                      icon: Icons.merge_type,
-                      label: 'Merge',
-                      fg: _defaultBtnFg,
-                      bg: _defaultBtnBg,
-                      onTap: () => _comingSoon('Merge'),
-                    ),
-                  ],
-                ),
-              );
-            },
           ),
-          // Synopsis
-          if (desc.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
-              child: InkWell(
-                onTap: () => setState(() => _descExpanded = !_descExpanded),
-                child: Column(
-                  children: [
-                    Text(
-                      desc,
-                      maxLines: _descExpanded ? null : 2,
-                      overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14, color: _gray400, height: 1.5),
-                    ),
-                    const SizedBox(height: 6),
-                    Icon(
-                      _descExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                      color: _gray500,
-                      size: 22,
-                    ),
-                  ],
-                ),
-              ),
+          SliverToBoxAdapter(
+            child: Consumer(
+              builder: (context, ref, _) {
+                final library = ref.watch(libraryManagerProvider.notifier);
+                ref.watch(libraryManagerProvider);
+                final fav = library.isFavorite(widget.sourceId, widget.entry.id);
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _actionButton(
+                        svg: _svgBookOpen,
+                        label: fav ? 'In Library' : 'Add to Library',
+                        fg: fav ? _libraryFg : _defaultBtnFg,
+                        bg: fav ? _libraryBg : _defaultBtnBg,
+                        onTap: () => library.toggle(e),
+                      ),
+                      _actionButton(
+                        svg: _svgCalendarClock,
+                        label: 'Soon',
+                        fg: _defaultBtnFg,
+                        bg: _defaultBtnBg,
+                        onTap: () => _comingSoon('This'),
+                      ),
+                      _actionButton(
+                        svg: _svgCheckCircle,
+                        label: 'Trackers',
+                        fg: _trackerFg,
+                        bg: _trackerBg,
+                        onTap: () => _comingSoon('Trackers'),
+                      ),
+                      _actionButton(
+                        svg: _svgCompass,
+                        label: 'WebView',
+                        fg: _defaultBtnFg,
+                        bg: _defaultBtnBg,
+                        onTap: () => _openWebView(e),
+                      ),
+                      _actionButton(
+                        svg: _svgGitMerge,
+                        label: 'Merge',
+                        fg: _defaultBtnFg,
+                        bg: _defaultBtnBg,
+                        onTap: () => _comingSoon('Merge'),
+                      ),
+                    ],
+                  ),
+                );
+               },
             ),
-          // Tags row
-          if (e.genres.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: SizedBox(
-                height: 38,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: e.genres.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: _tagBg, borderRadius: BorderRadius.circular(8)),
-                    child: Text(e.genres[i], style: const TextStyle(color: _tagFg, fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+          if (desc.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
+                child: InkWell(
+                  onTap: () => setState(() => _descExpanded = !_descExpanded),
+                  child: Column(
+                    children: [
+                      Text(
+                        desc,
+                        maxLines: _descExpanded ? null : 2,
+                        overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14, color: _gray400, height: 1.5),
+                      ),
+                      const SizedBox(height: 6),
+                      Transform.rotate(
+                        angle: _descExpanded ? pi : 0,
+                        child: _svgIcon(_svgChevronDown, size: 22, color: _gray500),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          const SizedBox(height: 32),
+          if (e.genres.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: SizedBox(
+                  height: 38,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: e.genres.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, i) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: _tagBg, borderRadius: BorderRadius.circular(8)),
+                      child: Text(e.genres[i],
+                          style: const TextStyle(color: _tagFg, fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
+              child: Row(
+                children: [
+                  Text('${_chunks.length} $chunkWord${_chunks.length == 1 ? '' : 's'}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: TextField(
+                style: const TextStyle(color: Colors.white),
+                onChanged: (v) => setState(() => _query = v),
+                decoration: InputDecoration(
+                  hintText: 'Quick jump to ${e.type == ContentType.anime ? 'episode' : 'chapter'} (e.g. 110)...',
+                  hintStyle: const TextStyle(color: _gray500),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: _svgIcon(_svgSearch, size: 18, color: _gray500),
+                  ),
+                  suffixIcon: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: _defaultBtnBg, borderRadius: BorderRadius.circular(10)),
+                      child: Text('${_chunks.length} TOTAL',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _gray500)),
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: _card,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                ),
+              ),
+            ),
+          ),
+          SliverList.builder(
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final c = items[i];
+              final unread = !c.read;
+              final textColor = unread ? Colors.white : _readDim;
+              final dateColor = unread ? const Color(0xFF71717A) : _readDim.withOpacity(0.8);
+              return InkWell(
+                onTap: () => _openChunk(c),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Colors.white10)),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (unread)
+                        Positioned(
+                          left: -20,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: Container(
+                              width: 6,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: _accent,
+                                borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                                boxShadow: [BoxShadow(color: _accent.withOpacity(0.7), blurRadius: 10)],
+                              ),
+                            ),
+                          ),
+                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 8, right: 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    c.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  if (c.uploadDate != null)
+                                    Text(_fmtDate(c.uploadDate!),
+                                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: dateColor)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 38,
+                            height: 38,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.04),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                            ),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: _svgIcon(_svgDownloadTray, size: 18, color: unread ? _iconBar : _readDim),
+                              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Downloads are not available yet.')),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 96)),
         ],
       ),
     );
@@ -451,12 +674,12 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
 
   Widget _statDivider() => Container(width: 1, height: 40, color: Colors.white10);
 
-  Widget _metaRow(IconData icon, String text) {
+  Widget _metaRow(String svg, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: _gray500),
+          _svgIcon(svg, size: 16, color: _gray500),
           const SizedBox(width: 8),
           Expanded(
             child: Text(text,
@@ -469,27 +692,8 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     );
   }
 
-  Widget _soonIcon(Color color) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Icon(Icons.calendar_today_outlined, color: color, size: 24),
-        Positioned(
-          bottom: -3,
-          right: -3,
-          child: Container(
-            padding: const EdgeInsets.all(1),
-            decoration: BoxDecoration(color: _defaultBtnBg, shape: BoxShape.circle),
-            child: Icon(Icons.watch_later_outlined, color: color, size: 13),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _actionButton({
-    IconData? icon,
-    Widget? customIcon,
+    required String svg,
     required String label,
     required Color fg,
     required Color bg,
@@ -505,246 +709,11 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
             height: 56,
             alignment: Alignment.center,
             decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(19)),
-            child: customIcon ?? Icon(icon, color: fg, size: 24),
+            child: _svgIcon(svg, size: 24, color: fg),
           ),
           const SizedBox(height: 8),
           Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
         ],
-      ),
-    );
-  }
-}
-
-/// Chapter list screen matching the "Premium Chapter List" design: sticky
-/// header, unread red edge-bar indicator, dimmed read rows, glass download
-/// buttons, and a squarcle play FAB that resumes at the first unread chapter.
-class _ChapterListScreen extends StatefulWidget {
-  final String title;
-  final bool isAnime;
-  final List<EntryChunk> chunks;
-  final void Function(EntryChunk) onOpen;
-  final Future<void> Function() onRefresh;
-
-  const _ChapterListScreen({
-    required this.title,
-    required this.isAnime,
-    required this.chunks,
-    required this.onOpen,
-    required this.onRefresh,
-  });
-
-  @override
-  State<_ChapterListScreen> createState() => _ChapterListScreenState();
-}
-
-class _ChapterListScreenState extends State<_ChapterListScreen> {
-  bool _newestFirst = true;
-
-  List<EntryChunk> get _sortedAsc {
-    final list = List<EntryChunk>.from(widget.chunks);
-    list.sort((a, b) => a.number.compareTo(b.number));
-    return list;
-  }
-
-  List<EntryChunk> get _visible {
-    final list = _sortedAsc;
-    return _newestFirst ? list.reversed.toList() : list;
-  }
-
-  void _resume() {
-    final asc = _sortedAsc;
-    if (asc.isEmpty) return;
-    final unread = asc.where((c) => !c.read);
-    widget.onOpen(unread.isNotEmpty ? unread.first : asc.last);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = _visible;
-    final word = widget.isAnime ? 'episodes' : 'chapters';
-    return Scaffold(
-      backgroundColor: _bgList,
-      body: Column(
-        children: [
-          // Sticky header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: const BoxDecoration(
-              color: _bgList,
-              border: Border(bottom: BorderSide(color: Colors.white12)),
-            ),
-            child: Row(
-             children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFFD4D4D8), size: 24),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.cloud_download_outlined, color: Color(0xFFD4D4D8), size: 22),
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Downloads are not available yet.')),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.filter_alt_outlined, color: Color(0xFFD4D4D8), size: 22),
-                  tooltip: _newestFirst ? 'Newest first' : 'Oldest first',
-                  onPressed: () => setState(() => _newestFirst = !_newestFirst),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz, color: Color(0xFFD4D4D8), size: 22),
-                  onSelected: (v) {
-                    if (v == 'refresh') widget.onRefresh();
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'refresh', child: Text('Refresh')),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Count bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: const BoxDecoration(
-              color: _bgList,
-              border: Border(bottom: BorderSide(color: Colors.white10)),
-            ),
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                children: [
-                  TextSpan(text: '${widget.chunks.length} $word '),
-                  const TextSpan(
-                    text: '(Total)',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _gray500),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.only(bottom: 112),
-              itemCount: items.length,
-              itemBuilder: (context, i) {
-                final c = items[i];
-                final unread = !c.read;
-                final textColor = unread ? Colors.white : _readDim;
-                final dateColor = unread ? const Color(0xFF71717A) : _readDim.withOpacity(0.8);
-                return InkWell(
-                  onTap: () => widget.onOpen(c),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: const BoxDecoration(
-                      border: Border(bottom: BorderSide(color: Colors.white10)),
-                    ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        if (unread)
-                          Positioned(
-                            left: -20,
-                            top: 0,
-                            bottom: 0,
-                            child: Center(
-                              child: Container(
-                                width: 6,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: _accent,
-                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
-                                  boxShadow: [BoxShadow(color: _accent.withOpacity(0.7), blurRadius: 10)],
-                                ),
-                              ),
-                            ),
-                          ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 8, right: 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text.rich(
-                                      TextSpan(
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                                          color: textColor,
-                                        ),
-                                        children: [TextSpan(text: c.title)],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    if (c.uploadDate != null)
-                                      Text(_fmtDate(c.uploadDate!),
-                                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: dateColor)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: 38,
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.04),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white.withOpacity(0.08)),
-                              ),
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: Icon(Icons.file_download_outlined,
-                                    color: unread ? const Color(0xFFD4D4D8) : _readDim, size: 20),
-                                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Downloads are not available yet.')),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: Container(
-        width: 58,
-        height: 58,
-        decoration: BoxDecoration(
-          color: _accent,
-          borderRadius: BorderRadius.circular(19),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-          boxShadow: [BoxShadow(color: _accent.withOpacity(0.4), blurRadius: 24, offset: const Offset(0, 8))],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(19),
-            onTap: widget.chunks.isEmpty ? null : _resume,
-            child: const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.play_arrow_rounded, color: Color(0xFF120406), size: 30),
-            ),
-          ),
-        ),
       ),
     );
   }
