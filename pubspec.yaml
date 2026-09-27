@@ -32,6 +32,9 @@ dependencies:
   video_player: ^2.9.1   # for anime playback
   chewie: ^1.8.1
 
+  # Vector icons matching the app's design mockups exactly
+  flutter_svg: ^2.0.10+1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
