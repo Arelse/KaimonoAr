@@ -11,17 +11,23 @@ import 'novel_reader_screen.dart';
 import 'player_screen.dart';
 import 'webview_screen.dart';
 
-const _bg = Color(0xFF0D0809);
-const _card = Color(0xFF1A0F11);
+const _bgDetail = Color(0xFF0E0909);
+const _bgList = Color(0xFF120406);
+const _statsBg = Color(0xFF1A1D24);
+const _statLabel = Color(0xFF828797);
+const _gold = Color(0xFFFBBF24);
+const _libraryBg = Color(0xFF232135);
+const _libraryFg = Color(0xFF8B7FF9);
+const _defaultBtnBg = Color(0xFF201C1E);
+const _defaultBtnFg = Color(0xFFA19D9E);
+const _trackerBg = Color(0xFF2C1C21);
+const _trackerFg = Color(0xFFFF7B7B);
+const _tagBg = Color(0xFF291717);
+const _tagFg = Color(0xFFD88787);
+const _gray400 = Color(0xFF9CA3AF);
+const _gray500 = Color(0xFF6B7280);
 const _accent = Color(0xFFFF7B7B);
-const _accentDim = Color(0xFF2A1416);
-const _libraryFg = Color(0xFF7C7CFF);
-const _libraryBg = Color(0xFF26224A);
-const _trackerBg = Color(0xFF3A1A1E);
-const _statsBg = Color(0xFF141A28);
-const _gold = Color(0xFFFFC83D);
-const _btnBg = Color(0xFF211A1B);
-const _muted = Color(0xFF9A9092);
+const _readDim = Color(0xFF7A6468);
 
 String _fmtNum(double n) => n == n.roundToDouble() ? n.toInt().toString() : n.toString();
 
@@ -198,296 +204,320 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: _bg,
+        backgroundColor: _bgDetail,
         body: Center(child: CircularProgressIndicator(color: _accent)),
       );
     }
     final e = _details!;
-    final chunkWord = e.type == ContentType.anime ? 'Episode' : 'Chapter';
-    final desc = (e.description == null) ? '' : _stripHtml(e.description!);
+    final desc = e.description == null ? '' : _stripHtml(e.description!);
     final hasStats = e.rank != null || e.rating != null || e.saves != null;
 
     return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cloud_download_outlined),
-            onPressed: () => _comingSoon('Downloads'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () => _openChapterList(e),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz),
-            onSelected: (value) {
-              if (value == 'refresh') _load();
-              if (value == 'categories') _openCategoryPicker();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'refresh', child: Text('Refresh')),
-              PopupMenuItem(value: 'categories', child: Text('Set categories')),
-            ],
-          ),
-        ],
-      ),
+      backgroundColor: _bgDetail,
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: EdgeInsets.zero,
         children: [
-          // Header: cover + title/meta
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  width: 112,
-                  height: 156,
-                  child: e.coverUrl != null
-                      ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
-                      : Container(color: _card),
+          // Top nav
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
+                  onPressed: () => Navigator.pop(context),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      e.title,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, height: 1.15),
-                    ),
-                    const SizedBox(height: 12),
-                    if (e.author != null && e.author!.isNotEmpty)
-                      _metaRow(Icons.person_outline, e.author!),
-                    if (e.artist != null && e.artist!.isNotEmpty)
-                      _metaRow(Icons.edit_outlined, e.artist!),
-                    _metaRow(Icons.schedule, _statusLine(e)),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.cloud_download_outlined, color: Color(0xFFD4D4D8)),
+                  onPressed: () => _comingSoon('Downloads'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.filter_alt_outlined, color: Color(0xFFD4D4D8)),
+                  onPressed: () => _openChapterList(e),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz, color: Color(0xFFD4D4D8)),
+                  onSelected: (value) {
+                    if (value == 'refresh') _load();
+                    if (value == 'categories') _openCategoryPicker();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+                    PopupMenuItem(value: 'categories', child: Text('Set categories')),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          // Stats card (only when the source provides data)
-          if (hasStats) ...[
-            _statsCard(e),
-            const SizedBox(height: 20),
-          ],
-          // Action row
+          // Header: cover + details
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 115,
+                  height: 160,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: e.coverUrl != null
+                      ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
+                      : Container(color: const Color(0xFF1F2937)),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e.title,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            height: 1.2,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (e.author != null && e.author!.isNotEmpty)
+                          _metaRow(Icons.person_outline, e.author!),
+                        if (e.artist != null && e.artist!.isNotEmpty)
+                          _metaRow(Icons.edit_outlined, e.artist!),
+                        _metaRow(Icons.schedule, _statusLine(e)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Stats box
+          if (hasStats)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(color: _statsBg, borderRadius: BorderRadius.circular(20)),
+              child: Row(
+                children: [
+                  _stat('RANK', Text(_rankText(e), style: _statValueStyle)),
+                  _statDivider(),
+                  _stat(
+                    'RATING',
+                    e.rating == null
+                        ? const Text('—', style: _statValueStyle)
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star, color: _gold, size: 14),
+                              const SizedBox(width: 4),
+                              Text(e.rating!.toStringAsFixed(2),
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _gold)),
+                            ],
+                          ),
+                  ),
+                  _statDivider(),
+                  _stat('SAVES', Text(e.saves ?? '—', style: _statValueStyle)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 24),
+          // Action buttons
           Consumer(
             builder: (context, ref, _) {
               final library = ref.watch(libraryManagerProvider.notifier);
               ref.watch(libraryManagerProvider);
               final fav = library.isFavorite(widget.sourceId, widget.entry.id);
-              return Row(
-                children: [
-                  _actionButton(
-                    icon: fav ? Icons.menu_book : Icons.menu_book_outlined,
-                    label: fav ? 'In Library' : 'Add to Library',
-                    fg: fav ? _libraryFg : _muted,
-                    bg: fav ? _libraryBg : _btnBg,
-                    onTap: () => library.toggle(e),
-                  ),
-                  _actionButton(
-                    icon: Icons.event_note_outlined,
-                    label: 'Soon',
-                    fg: _muted,
-                    bg: _btnBg,
-                    onTap: () => _comingSoon('This'),
-                  ),
-                  _actionButton(
-                    icon: Icons.check_circle_outline,
-                    label: 'Trackers',
-                    fg: _accent,
-                    bg: _trackerBg,
-                    onTap: () => _comingSoon('Trackers'),
-                  ),
-                  _actionButton(
-                    icon: Icons.explore_outlined,
-                    label: 'WebView',
-                    fg: _muted,
-                    bg: _btnBg,
-                    onTap: () => _openWebView(e),
-                  ),
-                  _actionButton(
-                    icon: Icons.call_split,
-                    label: 'Merge',
-                    fg: _muted,
-                    bg: _btnBg,
-                    onTap: () => _comingSoon('Merge'),
-                  ),
-                ],
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _actionButton(
+                      icon: Icons.menu_book_outlined,
+                      label: fav ? 'In Library' : 'Add to Library',
+                      fg: fav ? _libraryFg : _defaultBtnFg,
+                      bg: fav ? _libraryBg : _defaultBtnBg,
+                      onTap: () => library.toggle(e),
+                    ),
+                    _actionButton(
+                      icon: null,
+                      customIcon: _soonIcon(_defaultBtnFg),
+                      label: 'Soon',
+                      fg: _defaultBtnFg,
+                      bg: _defaultBtnBg,
+                      onTap: () => _comingSoon('This'),
+                    ),
+                    _actionButton(
+                      icon: Icons.check_circle_outline,
+                      label: 'Trackers',
+                      fg: _trackerFg,
+                      bg: _trackerBg,
+                      onTap: () => _comingSoon('Trackers'),
+                    ),
+                    _actionButton(
+                      icon: Icons.explore_outlined,
+                      label: 'WebView',
+                      fg: _defaultBtnFg,
+                      bg: _defaultBtnBg,
+                      onTap: () => _openWebView(e),
+                    ),
+                    _actionButton(
+                      icon: Icons.merge_type,
+                      label: 'Merge',
+                      fg: _defaultBtnFg,
+                      bg: _defaultBtnBg,
+                      onTap: () => _comingSoon('Merge'),
+                    ),
+                  ],
+                ),
               );
             },
           ),
-          const SizedBox(height: 20),
-          // Description (expandable, HTML stripped)
+          // Synopsis
           if (desc.isNotEmpty)
-            InkWell(
-              onTap: () => setState(() => _descExpanded = !_descExpanded),
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
+              child: InkWell(
+                onTap: () => setState(() => _descExpanded = !_descExpanded),
+                child: Column(
+                  children: [
+                    Text(
                       desc,
                       maxLines: _descExpanded ? null : 2,
                       overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 16, height: 1.5, color: _muted),
+                      style: const TextStyle(fontSize: 14, color: _gray400, height: 1.5),
                     ),
-                  ),
-                  Icon(_descExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: _muted),
-                ],
-              ),
-            ),
-          const SizedBox(height: 12),
-          // Genre chips (horizontal scroll)
-          if (e.genres.isNotEmpty)
-            SizedBox(
-              height: 42,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: e.genres.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, i) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: _accentDim, borderRadius: BorderRadius.circular(14)),
-                  child: Text(e.genres[i], style: const TextStyle(color: _accent, fontSize: 15)),
+                    const SizedBox(height: 6),
+                    Icon(
+                      _descExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: _gray500,
+                      size: 22,
+                    ),
+                  ],
                 ),
               ),
             ),
-          const SizedBox(height: 20),
-          // Chapters entry point
-          InkWell(
-            onTap: () => _openChapterList(e),
-            borderRadius: BorderRadius.circular(18),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-              decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(18)),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${_chunks.length} $chunkWord${_chunks.length == 1 ? '' : 's'}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                    ),
+          // Tags row
+          if (e.genres.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SizedBox(
+                height: 38,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: e.genres.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: _tagBg, borderRadius: BorderRadius.circular(8)),
+                    child: Text(e.genres[i], style: const TextStyle(color: _tagFg, fontSize: 13, fontWeight: FontWeight.w500)),
                   ),
-                  const Icon(Icons.arrow_forward, color: _muted),
-                ],
+                ),
               ),
             ),
-          ),
+          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _statsCard(Entry e) {
-    String rankText = '—';
-    if (e.rank != null && e.rank!.isNotEmpty) {
-      rankText = e.rank!.startsWith('#') ? e.rank! : '#${e.rank}';
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      decoration: BoxDecoration(color: _statsBg, borderRadius: BorderRadius.circular(24)),
-      child: Row(
-        children: [
-          _stat('RANK', Text(rankText, style: _statValueStyle)),
-          _statDivider(),
-          _stat(
-            'RATING',
-            e.rating == null
-                ? const Text('—', style: _statValueStyle)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.star, color: _gold, size: 20),
-                      const SizedBox(width: 6),
-                      Text(e.rating!.toStringAsFixed(2),
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _gold)),
-                    ],
-                  ),
-          ),
-          _statDivider(),
-          _stat('SAVES', Text(e.saves ?? '—', style: _statValueStyle)),
-        ],
-      ),
-    );
+  String _rankText(Entry e) {
+    if (e.rank == null || e.rank!.isEmpty) return '—';
+    return e.rank!.startsWith('#') ? e.rank! : '#${e.rank}';
   }
 
-  static const _statValueStyle = TextStyle(fontSize: 24, fontWeight: FontWeight.w800);
+  static const _statValueStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white);
 
   Widget _stat(String label, Widget value) {
     return Expanded(
       child: Column(
         children: [
-          Text(label, style: const TextStyle(fontSize: 13, letterSpacing: 1.5, fontWeight: FontWeight.w600, color: _muted)),
-          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.bold, color: _statLabel)),
+          const SizedBox(height: 4),
           value,
         ],
       ),
     );
   }
 
-  Widget _statDivider() => Container(width: 1, height: 44, color: Colors.white12);
+  Widget _statDivider() => Container(width: 1, height: 40, color: Colors.white10);
 
   Widget _metaRow(IconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: _muted),
-          const SizedBox(width: 10),
+          Icon(icon, size: 16, color: _gray500),
+          const SizedBox(width: 8),
           Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 16, color: _muted), maxLines: 2, overflow: TextOverflow.ellipsis),
+            child: Text(text,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: _gray400),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
           ),
         ],
       ),
     );
   }
 
+  Widget _soonIcon(Color color) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(Icons.calendar_today_outlined, color: color, size: 24),
+        Positioned(
+          bottom: -3,
+          right: -3,
+          child: Container(
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(color: _defaultBtnBg, shape: BoxShape.circle),
+            child: Icon(Icons.watch_later_outlined, color: color, size: 13),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _actionButton({
-    required IconData icon,
+    IconData? icon,
+    Widget? customIcon,
     required String label,
     required Color fg,
     required Color bg,
     required VoidCallback onTap,
   }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Column(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(18)),
-              child: Icon(icon, color: fg, size: 26),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: fg),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(19),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(19)),
+            child: customIcon ?? Icon(icon, color: fg, size: 24),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
+        ],
       ),
     );
   }
 }
 
-/// Full chapter list: quick-jump search, unread dots, "New" tag, dimmed read
-/// chapters, download button (placeholder), and a resume/start FAB.
+/// Chapter list screen matching the "Premium Chapter List" design: sticky
+/// header, unread red edge-bar indicator, dimmed read rows, glass download
+/// buttons, and a squarcle play FAB that resumes at the first unread chapter.
 class _ChapterListScreen extends StatefulWidget {
   final String title;
   final bool isAnime;
@@ -509,7 +539,6 @@ class _ChapterListScreen extends StatefulWidget {
 
 class _ChapterListScreenState extends State<_ChapterListScreen> {
   bool _newestFirst = true;
-  String _query = '';
 
   List<EntryChunk> get _sortedAsc {
     final list = List<EntryChunk>.from(widget.chunks);
@@ -518,19 +547,8 @@ class _ChapterListScreenState extends State<_ChapterListScreen> {
   }
 
   List<EntryChunk> get _visible {
-    var list = _sortedAsc;
-    if (_newestFirst) list = list.reversed.toList();
-    final q = _query.trim();
-    if (q.isNotEmpty) {
-      list = list.where((c) => _fmtNum(c.number).contains(q) || c.title.toLowerCase().contains(q.toLowerCase())).toList();
-    }
-    return list;
-  }
-
-  bool _isNew(EntryChunk c, int index) {
-    if (c.read || c.uploadDate == null) return false;
-    if (!_newestFirst || index != 0 || _query.isNotEmpty) return false;
-    return DateTime.now().difference(c.uploadDate!).inDays <= 7;
+    final list = _sortedAsc;
+    return _newestFirst ? list.reversed.toList() : list;
   }
 
   void _resume() {
@@ -543,124 +561,162 @@ class _ChapterListScreenState extends State<_ChapterListScreen> {
   @override
   Widget build(BuildContext context) {
     final items = _visible;
+    final word = widget.isAnime ? 'episodes' : 'chapters';
     return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        surfaceTintColor: Colors.transparent,
-        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            tooltip: _newestFirst ? 'Newest first' : 'Oldest first',
-            onPressed: () => setState(() => _newestFirst = !_newestFirst),
-          ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: widget.onRefresh),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _accent,
-        foregroundColor: Colors.black,
-        onPressed: widget.chunks.isEmpty ? null : _resume,
-        child: const Icon(Icons.play_arrow_rounded, size: 32),
-      ),
+      backgroundColor: _bgList,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              keyboardType: TextInputType.text,
-              onChanged: (v) => setState(() => _query = v),
-              decoration: InputDecoration(
-                hintText: 'Quick jump to ${widget.isAnime ? 'episode' : 'chapter'} (e.g. 110)...',
-                hintStyle: const TextStyle(color: _muted),
-                prefixIcon: const Icon(Icons.search, color: _muted),
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: _btnBg, borderRadius: BorderRadius.circular(10)),
-                    child: Text(
-                      '${widget.chunks.length} TOTAL',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _muted),
-                    ),
+          // Sticky header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: const BoxDecoration(
+              color: _bgList,
+              border: Border(bottom: BorderSide(color: Colors.white12)),
+            ),
+            child: Row(
+             children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Color(0xFFD4D4D8), size: 24),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
-                filled: true,
-                fillColor: _card,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+                IconButton(
+                  icon: const Icon(Icons.cloud_download_outlined, color: Color(0xFFD4D4D8), size: 22),
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Downloads are not available yet.')),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.filter_alt_outlined, color: Color(0xFFD4D4D8), size: 22),
+                  tooltip: _newestFirst ? 'Newest first' : 'Oldest first',
+                  onPressed: () => setState(() => _newestFirst = !_newestFirst),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz, color: Color(0xFFD4D4D8), size: 22),
+                  onSelected: (v) {
+                    if (v == 'refresh') widget.onRefresh();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Count bar
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: const BoxDecoration(
+              color: _bgList,
+              border: Border(bottom: BorderSide(color: Colors.white10)),
+            ),
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                children: [
+                  TextSpan(text: '${widget.chunks.length} $word '),
+                  const TextSpan(
+                    text: '(Total)',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _gray500),
+                  ),
+                ],
               ),
             ),
           ),
+          // List
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+              padding: const EdgeInsets.only(bottom: 112),
               itemCount: items.length,
               itemBuilder: (context, i) {
                 final c = items[i];
-                final isNew = _isNew(c, i);
-                final dimmed = c.read;
-                final textColor = dimmed ? _muted.withOpacity(0.6) : Colors.white;
-                final subParts = <String>[];
-                if (c.uploadDate != null) subParts.add(_fmtDate(c.uploadDate!));
-                if (isNew) subParts.add('New');
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Material(
-                    color: dimmed ? _card.withOpacity(0.5) : _card,
-                    borderRadius: BorderRadius.circular(20),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => widget.onOpen(c),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      if (!c.read) ...[
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(color: _accent, shape: BoxShape.circle),
-                                        ),
-                                        const SizedBox(width: 10),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          c.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: textColor),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (subParts.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      subParts.join(' • '),
-                                      style: TextStyle(fontSize: 15, color: _muted.withOpacity(dimmed ? 0.5 : 1)),
-                                    ),
-                                  ],
-                                ],
+                final unread = !c.read;
+                final textColor = unread ? Colors.white : _readDim;
+                final dateColor = unread ? const Color(0xFF71717A) : _readDim.withOpacity(0.8);
+                return InkWell(
+                  onTap: () => widget.onOpen(c),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Colors.white10)),
+                    ),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (unread)
+                          Positioned(
+                            left: -20,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: Container(
+                                width: 6,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: _accent,
+                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                                  boxShadow: [BoxShadow(color: _accent.withOpacity(0.7), blurRadius: 10)],
+                                ),
                               ),
                             ),
-                            IconButton(
-                              style: IconButton.styleFrom(backgroundColor: _btnBg),
-                              icon: Icon(Icons.file_download_outlined, color: textColor),
-                              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Downloads are not available yet.')),
+                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8, right: 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text.rich(
+                                      TextSpan(
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                                          color: textColor,
+                                        ),
+                                        children: [TextSpan(text: c.title)],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    if (c.uploadDate != null)
+                                      Text(_fmtDate(c.uploadDate!),
+                                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: dateColor)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: 38,
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.04),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: Icon(Icons.file_download_outlined,
+                                    color: unread ? const Color(0xFFD4D4D8) : _readDim, size: 20),
+                                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Downloads are not available yet.')),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 );
@@ -668,6 +724,27 @@ class _ChapterListScreenState extends State<_ChapterListScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: Container(
+        width: 58,
+        height: 58,
+        decoration: BoxDecoration(
+          color: _accent,
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
+          boxShadow: [BoxShadow(color: _accent.withOpacity(0.4), blurRadius: 24, offset: const Offset(0, 8))],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(19),
+            onTap: widget.chunks.isEmpty ? null : _resume,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.play_arrow_rounded, color: Color(0xFF120406), size: 30),
+            ),
+          ),
+        ),
       ),
     );
   }
