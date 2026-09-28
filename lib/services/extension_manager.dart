@@ -108,7 +108,6 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
     try {
       final map = Map<String, dynamic>.from(raw);
       
-      // PRECISE FILTER: Only skip the core app updates, NOT the extensions namespace
       final name = (map['name'] ?? '').toString().toLowerCase();
       final pkg = (map['pkg'] ?? map['id'] ?? '').toString().toLowerCase();
       
@@ -179,12 +178,12 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   static const _installedKey = 'installed_sources';
   static const _reposKey = 'custom_repos';
   
-  // FIXED URL: Pointing to a working JSON mirror instead of Keiyoushi's broken/deprecated endpoints
-    static const List<String> defaultRepoUrls = [
+  // Using a valid JSON mirror to ensure full compatibility with Kaimono's engine
+  static const List<String> defaultRepoUrls = [
     'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
-    'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json', // Active JSON mirror for Keiyoushi
+    'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json',
   ];
-  
+
   final List<ExtensionRepo> _repos = defaultRepoUrls.map((url) => ExtensionRepo(url)).toList();
   List<ExtensionRepo> get repos => _repos;
 
