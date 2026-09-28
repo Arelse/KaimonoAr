@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/extension_manager.dart';
+import '../theme/app_palette.dart';
 import 'categories_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -12,12 +13,17 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
+    // Watching (not just reading) makes this screen rebuild when repos change.
+    ref.watch(extensionManagerProvider);
     final manager = ref.read(extensionManagerProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          _sectionHeader('Appearance'),
+          const ThemeSettingsTile(),
+          const Divider(),
           _sectionHeader('Library'),
           ListTile(
             leading: const Icon(Icons.label_outline),
@@ -27,14 +33,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const Divider(),
           _sectionHeader('Source repositories'),
-          ...manager.repos.map((r) => ListTile(
-                leading: const Icon(Icons.link),
-                title: Text(r.url, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => setState(() => manager.removeRepo(r.url)),
-                ),
-              )),
+          ...manager.repos.map((r) {
+            final err = manager.repoErrors[r.url];
+            return ListTile(
+              leading: Icon(err == null ? Icons.link : Icons.error_outline,
+                  color: err == null ? null : Theme.of(context).colorScheme.error),
+              title: Text(r.url, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: err == null
+                  ? null
+                  : Text(err, maxLines: 3, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => manager.removeRepo(r.url),
+              ),
+            );
+          }),
           ListTile(
             leading: const Icon(Icons.add_link),
             title: const Text('Add repository'),
@@ -59,24 +72,82 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _addRepoDialog() {
     final controller = TextEditingController();
+    String? error;
+    bool busy = false;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Add extension repo'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'https://.../index.json'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              ref.read(extensionManagerProvider.notifier).addRepo(controller.text.trim());
-              Navigator.pop(context);
-            },
-            child: const Text('Add'),
-          ),
-        ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submit() async {
+            setDialogState(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              final count = await ref.read(extensionManagerProvider.notifier).addRepoChecked(controller.text);
+              if (!dialogContext.mounted) return;
+              Navigator.pop(dialogContext);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Repository added — $count source${count == 1 ? '' : 's'} found.')),
+                );
+              }
+            } on ExtensionException catch (e) {
+              setDialogState(() {
+                busy = false;
+                error = e.message;
+              });
+            } catch (e) {
+              setDialogState(() {
+                busy = false;
+                error = 'Unexpected error: $e';
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Add extension repo'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.url,
+                  decoration: InputDecoration(
+                    hintText: 'https://.../index.json',
+                    errorText: error,
+                    errorMaxLines: 5,
+                  ),
+                ),
+                if (busy)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: LinearProgressIndicator(),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              if (error != null)
+                TextButton(
+                  onPressed: () {
+                    ref.read(extensionManagerProvider.notifier).addRepo(controller.text);
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Save anyway'),
+                ),
+              FilledButton(
+                onPressed: busy ? null : submit,
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
