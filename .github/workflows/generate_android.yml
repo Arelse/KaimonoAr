@@ -1,0 +1,31 @@
+name: Generate Android Platform
+
+on:
+  workflow_dispatch: # This allows us to trigger it manually with a button
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Gives the bot permission to save the files
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Generate Android folder
+        run: flutter create . --platforms=android
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add android/
+          git commit -m "Auto-generated Android platform files" || echo "No changes to commit"
+          git push
+          
