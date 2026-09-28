@@ -1,5 +1,7 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,29 +10,18 @@ import '../models/entry.dart';
 import '../services/category_manager.dart';
 import '../services/extension_manager.dart';
 import '../services/library_manager.dart';
+import '../theme/app_palette.dart';
 import 'manga_reader_screen.dart';
 import 'novel_reader_screen.dart';
 import 'player_screen.dart';
 import 'webview_screen.dart';
 
-// ---------- Colors ----------
-const _bg = Color(0xFF0E0909);
-const _card = Color(0xFF1C1315);
-const _statsBg = Color(0xFF1A1D24);
+// Neutral colors (theme-independent)
 const _statLabel = Color(0xFF828797);
 const _gold = Color(0xFFFBBF24);
-const _libraryBg = Color(0xFF232135);
-const _libraryFg = Color(0xFF8B7FF9);
-const _defaultBtnBg = Color(0xFF201C1E);
-const _defaultBtnFg = Color(0xFFA19D9E);
-const _trackerBg = Color(0xFF2C1C21);
-const _trackerFg = Color(0xFFFF7B7B);
-const _tagBg = Color(0xFF291717);
-const _tagFg = Color(0xFFD88787);
+const _btnFg = Color(0xFFA19D9E);
 const _gray400 = Color(0xFF9CA3AF);
 const _gray500 = Color(0xFF6B7280);
-const _accent = Color(0xFFFF7B7B);
-const _readDim = Color(0xFF7A6468);
 const _iconBar = Color(0xFFD4D4D8);
 
 // ---------- Exact icon SVGs ----------
@@ -115,8 +106,26 @@ String _stripHtml(String s) {
   return t.trim();
 }
 
-/// Small, tightly-padded icon button used in the sticky top bar so icons
-/// stay compact and never crowd the status bar.
+/// Removes markdown link/bold syntax, keeping the visible text.
+String _cleanInline(String s) {
+  return s
+      .replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^)]*\)'), (m) => m[1]!)
+      .replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m[1]!)
+      .trim();
+}
+
+final _bulletRe = RegExp(r'^[-*•]\s+');
+
+String _plainDescription(String desc) {
+  final parts = <String>[];
+  for (final raw in desc.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    parts.add(_cleanInline(line.replaceFirst(_bulletRe, '')));
+  }
+  return parts.join(' ');
+}
+
 class _BarIcon extends StatelessWidget {
   final String svg;
   final Color color;
@@ -153,6 +162,7 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
   bool _descExpanded = false;
   bool _newestFirst = true;
   String _query = '';
+  late AppPalette _p;
 
   @override
   void initState() {
@@ -196,11 +206,28 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     return list;
   }
 
-  void _resume() {
+  bool _isNew(EntryChunk c, int index) {
+    if (c.read || c.uploadDate == null) return false;
+    if (!_newestFirst || index != 0 || _query.isNotEmpty) return false;
+    return DateTime.now().difference(c.uploadDate!).inDays <= 7;
+  }
+
+  EntryChunk? get _resumeTarget {
     final asc = _sortedAsc;
-    if (asc.isEmpty) return;
+    if (asc.isEmpty) return null;
     final unread = asc.where((c) => !c.read);
-    _openChunk(unread.isNotEmpty ? unread.first : asc.last);
+    return unread.isNotEmpty ? unread.first : asc.last;
+  }
+
+  void _resume() {
+    final t = _resumeTarget;
+    if (t != null) _openChunk(t);
+  }
+
+  String _chapterLabel(EntryChunk c) {
+    final t = c.title;
+    if (RegExp(r'^(ch\.?|chapter|ep\.?|episode)\s', caseSensitive: false).hasMatch(t)) return t;
+    return 'Ch. ${_fmtNum(c.number)}: $t';
   }
 
   void _openChunk(EntryChunk chunk) {
@@ -290,6 +317,32 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     );
   }
 
+  Future<void> _showTagMenu(Offset pos, String tag) async {
+    final size = MediaQuery.of(context).size;
+    const style = TextStyle(color: Colors.white);
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
+      color: _p.panel,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      items: const [
+        PopupMenuItem(value: 'search', child: Text('Search', style: style)),
+        PopupMenuItem(value: 'global', child: Text('Global search', style: style)),
+        PopupMenuItem(value: 'copy', child: Text('Copy to clipboard', style: style)),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'copy') {
+      await Clipboard.setData(ClipboardData(text: tag));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied "$tag"')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tag search will work once the Discover screen is updated.')),
+      );
+    }
+  }
+
   String _statusLine(Entry e) {
     final parts = <String>[];
     if (e.status != EntryStatus.unknown) {
@@ -302,10 +355,13 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _p = ref.watch(paletteProvider);
+    final p = _p;
+
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: _bg,
-        body: Center(child: CircularProgressIndicator(color: _accent)),
+      return Scaffold(
+        backgroundColor: p.bg,
+        body: Center(child: CircularProgressIndicator(color: p.accent)),
       );
     }
     final e = _details!;
@@ -314,366 +370,499 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     final items = _visibleChunks;
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: p.bg,
       floatingActionButton: SizedBox(
         width: 58,
         height: 58,
         child: Material(
-          color: _accent,
+          color: p.accent,
           borderRadius: BorderRadius.circular(19),
           child: InkWell(
             borderRadius: BorderRadius.circular(19),
             onTap: _chunks.isEmpty ? null : _resume,
             child: Padding(
               padding: const EdgeInsets.only(left: 4),
-              child: Center(child: _svgIcon(_svgPlay, size: 26, color: const Color(0xFF120406))),
+              child: Center(child: _svgIcon(_svgPlay, size: 26, color: p.onAccent)),
             ),
           ),
         ),
       ),
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                child: Row(
-                  children: [
-                    _BarIcon(svg: _svgBack, color: Colors.white, onTap: () => Navigator.pop(context)),
-                    const Spacer(),
-                    _BarIcon(svg: _svgCloudDownload, color: _iconBar, onTap: () => _comingSoon('Downloads')),
-                    _BarIcon(
-                      svg: _svgFilter,
-                      color: _iconBar,
-                      tooltip: _newestFirst ? 'Newest first' : 'Oldest first',
-                      onTap: () => setState(() => _newestFirst = !_newestFirst),
-                    ),
-                    PopupMenuButton<String>(
-                      icon: _svgIcon(_svgMoreDots, size: 20, color: _iconBar),
-                      padding: const EdgeInsets.all(6),
-                      onSelected: (value) {
-                        if (value == 'refresh') _load();
-                        if (value == 'categories') _openCategoryPicker();
-                      },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'refresh', child: Text('Refresh')),
-                        PopupMenuItem(value: 'categories', child: Text('Set categories')),
+      body: Stack(
+        children: [
+          _blurBackground(e),
+          SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                    child: Row(
+                      children: [
+                        _BarIcon(svg: _svgBack, color: Colors.white, onTap: () => Navigator.pop(context)),
+                        const Spacer(),
+                        _BarIcon(svg: _svgCloudDownload, color: _iconBar, onTap: () => _comingSoon('Downloads')),
+                        _BarIcon(
+                          svg: _svgFilter,
+                          color: _iconBar,
+                          tooltip: _newestFirst ? 'Newest first' : 'Oldest first',
+                          onTap: () => setState(() => _newestFirst = !_newestFirst),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: _svgIcon(_svgMoreDots, size: 20, color: _iconBar),
+                          padding: const EdgeInsets.all(6),
+                          onSelected: (value) {
+                            if (value == 'refresh') _load();
+                            if (value == 'categories') _openCategoryPicker();
+                            if (value == 'theme') showThemePicker(context);
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+                            PopupMenuItem(value: 'categories', child: Text('Set categories')),
+                            PopupMenuItem(value: 'theme', child: Text('Theme')),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 115,
-                      height: 160,
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: e.coverUrl != null
-                          ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
-                          : Container(color: const Color(0xFF1F2937)),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              e.title,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                height: 1.2,
-                                letterSpacing: -0.3,
-                              ),
+                // Header
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 115,
+                          height: 160,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: e.coverUrl != null
+                              ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
+                              : Container(color: p.surface),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  e.title,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    height: 1.2,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                if (e.author != null && e.author!.isNotEmpty) _metaRow(_svgPerson, e.author!),
+                                if (e.artist != null && e.artist!.isNotEmpty) _metaRow(_svgPencil, e.artist!),
+                                _metaRow(_svgClock, _statusLine(e)),
+                                _startReadingButton(),
+                              ],
                             ),
-                            const SizedBox(height: 12),
-                            if (e.author != null && e.author!.isNotEmpty)
-                              _metaRow(_svgPerson, e.author!),
-                            if (e.artist != null && e.artist!.isNotEmpty)
-                              _metaRow(_svgPencil, e.artist!),
-                            _metaRow(_svgClock, _statusLine(e)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Stats
+                SliverToBoxAdapter(
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(color: p.statsBg, borderRadius: BorderRadius.circular(20)),
+                    child: Row(
+                      children: [
+                        _stat('RANK', Text(_rankText(e), style: _statValueStyle)),
+                        _statDivider(),
+                        _stat(
+                          'RATING',
+                          e.rating == null
+                              ? const Text('—', style: _statValueStyle)
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _svgIcon(_svgStar, size: 14, color: _gold),
+                                    const SizedBox(width: 4),
+                                    Text(e.rating!.toStringAsFixed(2),
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _gold)),
+                                  ],
+                                ),
+                        ),
+                        _statDivider(),
+                        _stat('SAVES', Text(e.saves ?? '—', style: _statValueStyle)),
+                      ],
+                    ),
+                  ),
+                ),
+                // Actions
+                SliverToBoxAdapter(
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final library = ref.watch(libraryManagerProvider.notifier);
+                      ref.watch(libraryManagerProvider);
+                      final fav = library.isFavorite(widget.sourceId, widget.entry.id);
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _actionButton(
+                              svg: _svgBookOpen,
+                              label: fav ? 'In Library' : 'Add to Library',
+                              fg: fav ? p.secondary : _btnFg,
+                              bg: fav ? p.libraryBg : p.btnBg,
+                              onTap: () => library.toggle(e),
+                            ),
+                            _actionButton(
+                              svg: _svgCalendarClock,
+                              label: 'Soon',
+                              fg: _btnFg,
+                              bg: p.btnBg,
+                              onTap: () => _comingSoon('This'),
+                            ),
+                            _actionButton(
+                              svg: _svgCheckCircle,
+                              label: 'Trackers',
+                              fg: p.accent,
+                              bg: p.trackerBg,
+                              onTap: () => _comingSoon('Trackers'),
+                            ),
+                            _actionButton(
+                              svg: _svgCompass,
+                              label: 'WebView',
+                              fg: _btnFg,
+                              bg: p.btnBg,
+                              onTap: () => _openWebView(e),
+                            ),
+                            _actionButton(
+                              svg: _svgGitMerge,
+                              label: 'Merge',
+                              fg: _btnFg,
+                              bg: p.btnBg,
+                              onTap: () => _comingSoon('Merge'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // Synopsis
+                if (desc.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                      child: InkWell(
+                        onTap: () => setState(() => _descExpanded = !_descExpanded),
+                        child: Column(
+                          children: [
+                            if (_descExpanded)
+                              _expandedDescription(desc)
+                            else
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _plainDescription(desc),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.7), height: 1.5),
+                                ),
+                              ),
+                            const SizedBox(height: 6),
+                            Transform.rotate(
+                              angle: _descExpanded ? pi : 0,
+                              child: _svgIcon(_svgChevronDown, size: 22, color: _gray500),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(color: _statsBg, borderRadius: BorderRadius.circular(20)),
-                child: Row(
-                  children: [
-                    _stat('RANK', Text(_rankText(e), style: _statValueStyle)),
-                    _statDivider(),
-                    _stat(
-                      'RATING',
-                      e.rating == null
-                          ? const Text('—', style: _statValueStyle)
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _svgIcon(_svgStar, size: 14, color: _gold),
-                                const SizedBox(width: 4),
-                                Text(e.rating!.toStringAsFixed(2),
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _gold)),
-                              ],
-                            ),
-                    ),
-                    _statDivider(),
-                    _stat('SAVES', Text(e.saves ?? '—', style: _statValueStyle)),
-                  ],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final library = ref.watch(libraryManagerProvider.notifier);
-                  ref.watch(libraryManagerProvider);
-                  final fav = library.isFavorite(widget.sourceId, widget.entry.id);
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _actionButton(
-                          svg: _svgBookOpen,
-                          label: fav ? 'In Library' : 'Add to Library',
-                          fg: fav ? _libraryFg : _defaultBtnFg,
-                          bg: fav ? _libraryBg : _defaultBtnBg,
-                          onTap: () => library.toggle(e),
-                        ),
-                        _actionButton(
-                          svg: _svgCalendarClock,
-                          label: 'Soon',
-                          fg: _defaultBtnFg,
-                          bg: _defaultBtnBg,
-                          onTap: () => _comingSoon('This'),
-                        ),
-                        _actionButton(
-                          svg: _svgCheckCircle,
-                          label: 'Trackers',
-                          fg: _trackerFg,
-                          bg: _trackerBg,
-                          onTap: () => _comingSoon('Trackers'),
-                        ),
-                        _actionButton(
-                          svg: _svgCompass,
-                          label: 'WebView',
-                          fg: _defaultBtnFg,
-                          bg: _defaultBtnBg,
-                          onTap: () => _openWebView(e),
-                        ),
-                        _actionButton(
-                          svg: _svgGitMerge,
-                          label: 'Merge',
-                          fg: _defaultBtnFg,
-                          bg: _defaultBtnBg,
-                          onTap: () => _comingSoon('Merge'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            if (desc.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
-                  child: InkWell(
-                    onTap: () => setState(() => _descExpanded = !_descExpanded),
-                    child: Column(
-                      children: [
-                        Text(
-                          desc,
-                          maxLines: _descExpanded ? null : 2,
-                          overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 14, color: _gray400, height: 1.5),
-                        ),
-                        const SizedBox(height: 6),
-                        Transform.rotate(
-                          angle: _descExpanded ? pi : 0,
-                          child: _svgIcon(_svgChevronDown, size: 22, color: _gray500),
-                        ),
-                      ],
-                    ),
                   ),
-                ),
-              ),
-            if (e.genres.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SizedBox(
-                    height: 38,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: e.genres.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
-                      itemBuilder: (context, i) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(color: _tagBg, borderRadius: BorderRadius.circular(8)),
-                        child: Text(e.genres[i],
-                            style: const TextStyle(color: _tagFg, fontSize: 13, fontWeight: FontWeight.w500)),
+                // Tags
+                if (e.genres.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: SizedBox(
+                        height: 38,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: e.genres.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          itemBuilder: (context, i) {
+                            final tag = e.genres[i];
+                            return GestureDetector(
+                              onTapUp: (d) => _showTagMenu(d.globalPosition, tag),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(color: p.tagBg, borderRadius: BorderRadius.circular(8)),
+                                child: Text(tag,
+                                    style: TextStyle(color: p.tagFg, fontSize: 13, fontWeight: FontWeight.w500)),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
-                child: Row(
-                  children: [
-                    Text('${_chunks.length} $chunkWord${_chunks.length == 1 ? '' : 's'}',
+                // Chapters header
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 26, 16, 12),
+                    child: Text('${_chunks.length} $chunkWord${_chunks.length == 1 ? '' : 's'}',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                  ],
+                  ),
+                ),
+                // Search
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Container(
+                      height: 52,
+                      decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(22)),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 16),
+                          _svgIcon(_svgSearch, size: 17, color: _gray500),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              style: const TextStyle(color: Colors.white, fontSize: 14.5),
+                              onChanged: (v) => setState(() => _query = v),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                hintText:
+                                    'Quick jump to ${e.type == ContentType.anime ? 'episode' : 'chapter'} (e.g. 110)...',
+                                hintStyle: const TextStyle(color: _gray500, fontSize: 14.5),
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(color: p.btnBg, borderRadius: BorderRadius.circular(12)),
+                            child: Text('${_chunks.length} TOTAL',
+                                style: const TextStyle(
+                                    fontSize: 11.5, fontWeight: FontWeight.w700, color: _gray500, letterSpacing: 0.4)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SliverList.builder(
+                  itemCount: items.length,
+                  itemBuilder: (context, i) => _chapterRow(items[i], i),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 96)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _blurBackground(Entry e) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 520,
+      child: ClipRect(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (e.coverUrl != null)
+              ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                child: CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover),
+              ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [_p.bg.withOpacity(0.35), _p.bg.withOpacity(0.78), _p.bg],
+                  stops: const [0.0, 0.6, 1.0],
                 ),
               ),
             ),
-            // Search bar — matches the reference pill exactly
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Container(
-                  height: 52,
-                  decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(22)),
-                  child: Row(
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _startReadingButton() {
+    final target = _resumeTarget;
+    if (target == null) return const SizedBox.shrink();
+    final anyRead = _chunks.any((c) => c.read);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Material(
+        color: Color.alphaBlend(Colors.white.withOpacity(0.10), _p.bg),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _openChunk(target),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                _svgIcon(_svgPlay, size: 18, color: Colors.white),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(width: 16),
-                      _svgIcon(_svgSearch, size: 17, color: _gray500),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          style: const TextStyle(color: Colors.white, fontSize: 14.5),
-                          onChanged: (v) => setState(() => _query = v),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            hintText: 'Quick jump to ${e.type == ContentType.anime ? 'episode' : 'chapter'} (e.g. 110)...',
-                            hintStyle: const TextStyle(color: _gray500, fontSize: 14.5),
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: _defaultBtnBg, borderRadius: BorderRadius.circular(12)),
-                        child: Text('${_chunks.length} TOTAL',
-                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _gray500, letterSpacing: 0.4)),
-                      ),
+                      Text(anyRead ? 'Continue Reading' : 'Start Reading',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 2),
+                      Text(_chapterLabel(target),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-            SliverList.builder(
-              itemCount: items.length,
-              itemBuilder: (context, i) {
-                final c = items[i];
-                final unread = !c.read;
-                final textColor = unread ? Colors.white : _readDim;
-                final dateColor = unread ? const Color(0xFF71717A) : _readDim.withOpacity(0.8);
-                return InkWell(
-                  onTap: () => _openChunk(c),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: const BoxDecoration(
-                      border: Border(bottom: BorderSide(color: Colors.white10)),
-                    ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        if (unread)
-                          Positioned(
-                            left: -20,
-                            top: 0,
-                            bottom: 0,
-                            child: Center(
-                              child: Container(
-                                width: 6,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: _accent,
-                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
-                                  boxShadow: [BoxShadow(color: _accent.withOpacity(0.7), blurRadius: 10)],
-                                ),
-                              ),
-                            ),
-                          ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 8, right: 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      c.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    if (c.uploadDate != null)
-                                      Text(_fmtDate(c.uploadDate!),
-                                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: dateColor)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: 38,
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.04),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white.withOpacity(0.08)),
-                              ),
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: _svgIcon(_svgDownloadTray, size: 18, color: unread ? _iconBar : _readDim),
-                                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Downloads are not available yet.')),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _expandedDescription(String desc) {
+    final bodyStyle = TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.78), height: 1.5);
+    final headingStyle = TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.95), height: 1.5);
+    final children = <Widget>[];
+    for (final raw in desc.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty) continue;
+      final isBullet = _bulletRe.hasMatch(line);
+      final text = _cleanInline(line.replaceFirst(_bulletRe, ''));
+      final isHeading = !isBullet && RegExp(r'^\*\*.+\*\*:?$').hasMatch(line);
+      if (isBullet) {
+        children.add(Padding(
+          padding: const EdgeInsets.only(left: 12, top: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('•  ', style: bodyStyle),
+              Expanded(child: Text(text, style: bodyStyle)),
+            ],
+          ),
+        ));
+      } else {
+        children.add(Padding(
+          padding: EdgeInsets.only(top: children.isEmpty ? 0 : 14),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(text, style: isHeading ? headingStyle : bodyStyle),
+          ),
+        ));
+      }
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+
+  Widget _chapterRow(EntryChunk c, int index) {
+    final p = _p;
+    final unread = !c.read;
+    final isNew = _isNew(c, index);
+    final titleColor = unread ? Colors.white : Colors.white.withOpacity(0.4);
+    final subColor = unread ? const Color(0xFF8B8B93) : Colors.white.withOpacity(0.3);
+    final sub = <String>[];
+    if (c.uploadDate != null) sub.add(_fmtDate(c.uploadDate!));
+    if (isNew) sub.add('New');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        color: unread ? p.surface : p.surface.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _openChunk(c),
+          child: Stack(
+            children: [
+              if (unread)
+                Positioned.fill(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 4,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: p.accent,
+                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+                        boxShadow: [BoxShadow(color: p.accent.withOpacity(0.5), blurRadius: 8)],
+                      ),
                     ),
                   ),
-                );
-              },
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 96)),
-          ],
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+                child: Row(
+                  children: [
+                    if (unread) ...[
+                      Container(width: 7, height: 7, decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle)),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(c.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: titleColor)),
+                          if (sub.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(sub.join(' • '),
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: subColor)),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: _svgIcon(_svgDownloadTray, size: 16, color: unread ? _iconBar : subColor),
+                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Downloads are not available yet.')),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -690,7 +879,8 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     return Expanded(
       child: Column(
         children: [
-          Text(label, style: const TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.bold, color: _statLabel)),
+          Text(label,
+              style: const TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.bold, color: _statLabel)),
           const SizedBox(height: 4),
           value,
         ],
