@@ -66,14 +66,13 @@ class KeiyoshiSource implements Source {
     final rawChapters = await KeiyoshiBridge.fetchChapters(
       apkPath: apkPath,
       className: manifest.id,
-      entryUrl: entryId,
+      entryUrl:entryId,
     );
 
     return rawChapters.map((ch) => EntryChunk(
       id: ch['url'] ?? '',
       title: ch['name'] ?? 'Chapter',
       number: (ch['chapterNumber'] as num?)?.toDouble() ?? 1.0,
-      type: type, // Added required type parameter
     )).toList();
   }
 
