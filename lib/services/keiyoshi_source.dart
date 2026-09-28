@@ -29,24 +29,22 @@ class KeiyoshiSource implements Source {
 
   @override
   Future<List<Entry>> popular({int page = 1, String? genre}) async {
-    // Calls the native Android Kotlin bridge we built!
+    // Calls the native Android Kotlin bridge
     final rawList = await KeiyoshiBridge.fetchPopular(
       apkPath: apkPath,
-      className: manifest.id, // Assumes the repository JSON uses the class name as the ID
+      className: manifest.id,
       page: page,
     );
 
-    // Converts the raw JSON from Kotlin into Flutter Entry objects
+    // Converts the raw JSON from Kotlin into Flutter Entry objects, providing the required 'type'
     return rawList.map((data) => Entry(
       id: data['url'] ?? data['id'] ?? data.hashCode.toString(),
       sourceId: id,
       title: data['title'] ?? 'Unknown',
       coverUrl: data['thumbnailUrl'] ?? data['coverUrl'] ?? '',
+      type: type,
     )).toList();
   }
-
-  // TODO: The following methods need their own MethodChannel bridge endpoints 
-  // implemented in MainActivity.kt later to fully flesh out the reader.
 
   @override
   Future<List<Entry>> search(String query, {int page = 1, String? genre}) async => [];
