@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/source.dart';
 import 'js_source.dart';
 import 'keiyoshi_downloader.dart';
+import 'keiyoshi_source.dart';
 
 /// An error with a message that is safe to show to the user as-is.
 class ExtensionException implements Exception {
@@ -231,12 +233,15 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     final raw = prefs.getStringList(_installedKey);
     final map = <String, Source>{};
     if (raw != null) {
+      final directory = await getApplicationDocumentsDirectory();
       for (final item in raw) {
         try {
           final manifest = ExtensionManifest.fromJson(jsonDecode(item));
           
           if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-             // Temporarily skip fully loading APKs on boot until KeiyoshiSource is built
+             // Reconstruct the local file path for the saved Keiyoshi extension
+             final localApkPath = '${directory.path}/keiyoshi_extensions/${manifest.id}.apk';
+             map[manifest.id] = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
           } else {
              map[manifest.id] = JsSource(manifest);
           }
@@ -279,14 +284,13 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
         extensionId: manifest.id,
       );
       
-      // Temporarily throw an exception so the UI shows success to you directly on the screen
-      // without crashing the app by trying to load an incomplete source!
-      throw ExtensionException(
-        "Success! Keiyoshi APK downloaded securely to local storage.\n"
-        "Next step: We need to build a 'KeiyoshiSource' wrapper so Kaimono can actually load the manga from it."
-      );
+      // 2. Mount the native Source
+      final source = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
+      state = {...state, manifest.id: source};
+      await _persistInstalled();
+      
     } else {
-      // 2. Normal JS Source installation
+      // Normal JS Source installation
       final source = JsSource(manifest);
       state = {...state, manifest.id: source};
       await _persistInstalled();
