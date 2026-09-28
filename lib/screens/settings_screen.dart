@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/content_filter.dart';
 import '../services/extension_manager.dart';
 import '../theme/app_palette.dart';
 import 'categories_screen.dart';
@@ -16,6 +17,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Watching (not just reading) makes this screen rebuild when repos change.
     ref.watch(extensionManagerProvider);
     final manager = ref.read(extensionManagerProvider.notifier);
+    final showNsfw = ref.watch(showNsfwProvider);
+    final markedCount = ref.watch(nsfwSourcesProvider).length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -23,6 +26,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           _sectionHeader('Appearance'),
           const ThemeSettingsTile(),
+          const Divider(),
+          _sectionHeader('Content'),
+          SwitchListTile(
+            secondary: const Icon(Icons.eighteen_up_rating_outlined),
+            title: const Text('Show 18+ sources'),
+            subtitle: Text(markedCount == 0
+                ? 'Mark sources as 18+ with the chip in the Sources tab.'
+                : '$markedCount source${markedCount == 1 ? '' : 's'} marked 18+. Turn off to hide them from Discover.'),
+            value: showNsfw,
+            onChanged: (v) => ref.read(showNsfwProvider.notifier).set(v),
+          ),
           const Divider(),
           _sectionHeader('Library'),
           ListTile(
