@@ -66,7 +66,7 @@ Future<String> fetchText(String url) async {
   } on DioException catch (e) {
     final code = e.response?.statusCode;
     if (code != null) {
-      throw ExtensionException('The server returned HTTP $code for$url');
+      throw ExtensionException('The server returned HTTP $code for $url');
     }
     throw ExtensionException('Could not reach $url (${e.type.name}). Check the URL and your connection.');
   }
@@ -120,8 +120,6 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
         continue;
       }
 
-      // CRITICAL FIX: KeiyoshiSource uses `manifest.id` as the class name to load via DexClassLoader.
-      // We map `id` directly to the fully qualified Java class name ("class" field) so the bridge finds it.
       if (className.isNotEmpty) {
         map['id'] = className;
         map['className'] = className;
@@ -129,7 +127,6 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
         map['id'] = pkg;
         map['className'] = pkg;
       }
-      map['pkg'] = pkg;
 
       if (map.containsKey('apk') && !map.containsKey('script')) {
         String apkPath = map['apk'];
@@ -274,8 +271,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
           final manifest = ExtensionManifest.fromJson(decodedMap);
           
           if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-             // For APK path, use pkg name or id base if class contains dots
-             final storageId = (decodedMap['pkg'] ?? manifest.id).toString().split('.').last;
+             final storageId = manifest.id.split('.').last;
              final localApkPath = '${appDir.path}/keiyoshi_extensions/$storageId.apk';
              map[manifest.id] = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
           } else {
@@ -300,7 +296,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
       final typeString = m.type.toString().split('.').last;
       return jsonEncode({
         'id': m.id,
-        'pkg': m.pkg ?? m.id,
         'name': m.name,
         'lang': m.lang,
         'type': typeString,
@@ -316,8 +311,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   Future<void> install(ExtensionManifest manifest) async {
     try {
       if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-        // Use package name or base ID for the filename to avoid deep class paths in folder names
-        final storageId = (manifest.pkg ?? manifest.id).toString();
+        final storageId = manifest.id.split('.').last;
         final localApkPath = await KeiyoshiDownloader.downloadApk(
           downloadUrl: manifest.scriptUrl,
           extensionId: storageId,
@@ -333,7 +327,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
       }
       _notify();
     } catch (e) {
-      throw ExtensionException('Failed to install ${manifest.name}:$e');
+      throw ExtensionException('Failed to install ${manifest.name}: $e');
     }
   }
 
