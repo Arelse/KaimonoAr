@@ -5,23 +5,45 @@ import 'screens/browse_screen.dart';
 import 'screens/extensions_screen.dart';
 import 'screens/updates_screen.dart';
 import 'screens/settings_screen.dart';
+import 'theme/app_palette.dart';
 
 void main() {
   runApp(const ProviderScope(child: KaimonoApp()));
 }
 
-class KaimonoApp extends StatelessWidget {
+class KaimonoApp extends ConsumerWidget {
   const KaimonoApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = ref.watch(paletteProvider);
+
+    final scheme = ColorScheme.fromSeed(
+      seedColor: p.accent,
+      brightness: Brightness.dark,
+    ).copyWith(
+      primary: p.accent,
+      onPrimary: p.onAccent,
+      secondary: p.secondary,
+      surface: p.bg,
+      surfaceContainer: p.surface,
+      surfaceContainerHigh: p.panel,
+    );
+
     return MaterialApp(
       title: 'Kaimono',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF7C5CFC),
-          brightness: Brightness.dark,
+        colorScheme: scheme,
+        scaffoldBackgroundColor: p.bg,
+        appBarTheme: AppBarTheme(
+          backgroundColor: p.bg,
+          surfaceTintColor: Colors.transparent,
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: p.surface,
+          surfaceTintColor: Colors.transparent,
+          indicatorColor: p.accent.withOpacity(0.25),
         ),
         useMaterial3: true,
       ),
