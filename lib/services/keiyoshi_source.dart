@@ -52,7 +52,6 @@ class KeiyoshiSource implements Source {
 
   @override
   Future<Entry> getEntryDetails(String entryId) async {
-    // For now, return a basic entry placeholder using the ID
     return Entry(
       id: entryId,
       sourceId: id,
@@ -74,6 +73,7 @@ class KeiyoshiSource implements Source {
       id: ch['url'] ?? '',
       title: ch['name'] ?? 'Chapter',
       number: (ch['chapterNumber'] as num?)?.toDouble() ?? 1.0,
+      type: type, // Added required type parameter
     )).toList();
   }
 
