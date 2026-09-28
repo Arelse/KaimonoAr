@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:dio/dio.swift'; // ignore if using standard dio
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -12,7 +11,6 @@ class KeiyoshiDownloader {
     required String extensionId,
   }) async {
     try {
-      // Use application support directory instead of systemTemp to satisfy Android security policies
       final appDir = await getApplicationSupportDirectory();
       final extDir = Directory('${appDir.path}/keiyoshi_extensions');
       if (!await extDir.exists()) {
