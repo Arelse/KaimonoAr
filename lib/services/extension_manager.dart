@@ -295,20 +295,26 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     await prefs.setStringList(_installedKey, list);
   }
 
+  // UPDATED: Now properly catches download errors and updates the state.
   Future<void> install(ExtensionManifest manifest) async {
-    if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-      final localApkPath = await KeiyoshiDownloader.downloadApk(
-        downloadUrl: manifest.scriptUrl,
-        extensionId: manifest.id,
-      );
-      
-      final source = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
-      state = {...state, manifest.id: source};
-      await _persistInstalled();
-    } else {
-      final source = JsSource(manifest);
-      state = {...state, manifest.id: source};
-      await _persistInstalled();
+    try {
+      if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
+        final localApkPath = await KeiyoshiDownloader.downloadApk(
+          downloadUrl: manifest.scriptUrl,
+          extensionId: manifest.id,
+        );
+        
+        final source = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
+        state = {...state, manifest.id: source};
+        await _persistInstalled();
+      } else {
+        final source = JsSource(manifest);
+        state = {...state, manifest.id: source};
+        await _persistInstalled();
+      }
+      _notify(); // Ensure UI listeners are updated
+    } catch (e) {
+      throw ExtensionException('Failed to install ${manifest.name}: $e');
     }
   }
 
