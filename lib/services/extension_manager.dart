@@ -106,12 +106,13 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
     try {
       final map = Map<String, dynamic>.from(raw);
       
-      // Filter out non-source utility entries and app updates from the Keiyoshi repo index
-      final pkg = (map['pkg'] ?? map['id'] ?? '').toString();
-      if (pkg == 'eu.kanade.tachiyomi' || pkg.contains('tachiyomi') && !pkg.contains('.')) {
+      // Filter out non-source utility entries, app updates, and announcements
+      final name = (map['name'] ?? '').toString().toLowerCase();
+      final pkg = (map['pkg'] ?? map['id'] ?? '').toString().toLowerCase();
+      if (name.contains('update to') || name.contains('outdated app') || pkg.contains('tachiyomi') || pkg == 'eu.kanade.tachiyomi') {
         continue;
       }
-      if (map['isCompanion'] == true || map['hasReadme'] == true && !map.containsKey('apk')) {
+      if (map['isCompanion'] == true || (map['hasReadme'] == true && !map.containsKey('apk'))) {
         continue;
       }
 
@@ -282,11 +283,12 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     final prefs = await SharedPreferences.getInstance();
     final list = state.values.map((s) {
       final m = (s as dynamic).manifest;
+      final typeString = m.type.toString().split('.').last;
       return jsonEncode({
         'id': m.id,
         'name': m.name,
         'lang': m.lang,
-        'type': m.type.name,
+        'type': typeString,
         'icon': m.iconUrl,
         'script': m.scriptUrl,
         'version': m.version,
@@ -295,7 +297,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     await prefs.setStringList(_installedKey, list);
   }
 
-  // UPDATED: Now properly catches download errors and updates the state.
   Future<void> install(ExtensionManifest manifest) async {
     try {
       if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
@@ -312,7 +313,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
         state = {...state, manifest.id: source};
         await _persistInstalled();
       }
-      _notify(); // Ensure UI listeners are updated
+      _notify();
     } catch (e) {
       throw ExtensionException('Failed to install ${manifest.name}: $e');
     }
@@ -327,3 +328,4 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
 
 final extensionManagerProvider =
     StateNotifierProvider<ExtensionManager, Map<String, Source>>((ref) => ExtensionManager());
+
