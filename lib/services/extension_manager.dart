@@ -106,11 +106,6 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
     try {
       final map = Map<String, dynamic>.from(raw);
       
-      final name = (map['name'] ?? '').toString().toLowerCase();
-      if (name.contains('update to') || name.contains('outdated app') || name.contains('mihon')) {
-        continue;
-      }
-
       if (map.containsKey('pkg') && !map.containsKey('id')) {
         map['id'] = map['pkg'];
       }
