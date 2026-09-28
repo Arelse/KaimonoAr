@@ -1,15 +1,12 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/entry.dart';
 import '../services/extension_manager.dart';
+import '../theme/app_palette.dart';
 import 'webview_screen.dart';
 
 enum _ReadMode { paged, webtoon }
-
-const _panelBg = Color(0xE6141010); // near-opaque so it reads over white pages
-const _purple = Color(0xFF7C5CFF);
 
 String _fmtNum(double n) => n == n.roundToDouble() ? n.toInt().toString() : n.toString();
 
@@ -31,8 +28,11 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
   _ReadMode _mode = _ReadMode.paged;
   bool _controlsVisible = true;
   int _currentPage = 0;
+  int _webtoonIndex = 0;
   double _zoom = 1.0;
   bool _advancing = false;
+  bool _holdAtEnd = false;
+  late AppPalette _p;
 
   final PageController _pageController = PageController();
   final ScrollController _webtoonController = ScrollController();
@@ -50,7 +50,11 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
     setState(() {
       _loading = true;
       _currentPage = 0;
+      _webtoonIndex = 0;
       _advancing = false;
+      _holdAtEnd = false;
+      _zoom = 1.0;
+      _transformCtrl.value = Matrix4.identity();
     });
     final source = ref.read(extensionManagerProvider)[widget.sourceId]!;
     final pages = await source.getPages(_chunk.id);
@@ -88,11 +92,20 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
   }
 
   void _onWebtoonScroll() {
-    if (_mode != _ReadMode.webtoon || !_webtoonController.hasClients) return;
+    if (_mode != _ReadMode.webtoon || !_webtoonController.hasClients || _pages.isEmpty) return;
     final pos = _webtoonController.position;
-    if (pos.pixels >= pos.maxScrollExtent - 4 && pos.maxScrollExtent > 0) {
-      _autoAdvance();
+    final max = pos.maxScrollExtent;
+    if (max > 0) {
+      final idx = ((pos.pixels / max) * (_pages.length - 1)).round().clamp(0, _pages.length - 1);
+      if (idx != _webtoonIndex) setState(() => _webtoonIndex = idx);
     }
+    final atBottom = max > 0 && pos.pixels >= max - 4;
+    if (!atBottom) {
+      _holdAtEnd = false;
+      return;
+    }
+    if (_holdAtEnd) return;
+    _autoAdvance();
   }
 
   Future<void> _openWebView() async {
@@ -113,11 +126,12 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
   }
 
   void _openChapterPicker() {
+    final p = ref.read(paletteProvider);
     String query = '';
     bool grid = false;
     showModalBottomSheet(
       context: context,
-      backgroundColor: _panelBg,
+      backgroundColor: p.panel,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
@@ -128,24 +142,37 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
               ? sorted
               : sorted.where((c) => c.title.toLowerCase().contains(q) || _fmtNum(c.number).contains(q)).toList();
 
+          void pick(EntryChunk c, bool selected) {
+            Navigator.pop(context);
+            if (!selected) {
+              setState(() => _chunk = c);
+              _load();
+            }
+          }
+
           return SizedBox(
             height: MediaQuery.of(context).size.height * 0.75,
             child: Column(
               children: [
                 const SizedBox(height: 10),
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
                   child: Row(
                     children: [
-                      const Icon(Icons.menu_book_rounded, color: _purple, size: 22),
+                      Icon(Icons.menu_book_rounded, color: p.accent, size: 22),
                       const SizedBox(width: 8),
-                      const Text('Chapters', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
+                      const Text('Chapters',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(color: _purple, borderRadius: BorderRadius.circular(12)),
-                        child: Text('${sorted.length}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        decoration: BoxDecoration(color: p.accent, borderRadius: BorderRadius.circular(12)),
+                        child: Text('${sorted.length}',
+                            style: TextStyle(color: p.onAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                       const Spacer(),
                       IconButton(
@@ -155,7 +182,6 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                           const SnackBar(content: Text('Bulk downloads are coming soon.')),
                         ),
                       ),
-                      // Distinct icon per state: a grid glyph vs a list glyph, not two near-identical grids.
                       IconButton(
                         icon: Icon(grid ? Icons.view_list_rounded : Icons.grid_view_rounded, color: Colors.white70),
                         tooltip: grid ? 'Switch to list' : 'Switch to grid',
@@ -198,26 +224,24 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                             final selected = c.id == _chunk.id;
                             return InkWell(
                               borderRadius: BorderRadius.circular(14),
-                              onTap: () {
-                                Navigator.pop(context);
-                                if (!selected) {
-                                  setState(() => _chunk = c);
-                                  _load();
-                                }
-                              },
+                              onTap: () => pick(c, selected),
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: selected ? _purple.withOpacity(0.3) : Colors.white.withOpacity(0.06),
+                                  color: selected ? p.accent.withOpacity(0.28) : Colors.white.withOpacity(0.06),
                                   borderRadius: BorderRadius.circular(14),
-                                  border: selected ? Border.all(color: _purple) : null,
+                                  border: selected ? Border.all(color: p.accent) : null,
                                 ),
                                 alignment: Alignment.center,
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('Ch. ${_fmtNum(c.number)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                                    Text('Ch. ${_fmtNum(c.number)}',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                                     const SizedBox(height: 4),
-                                    Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                                    Text(c.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.white54, fontSize: 11)),
                                   ],
                                 ),
                               ),
@@ -234,37 +258,34 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  if (!selected) {
-                                    setState(() => _chunk = c);
-                                    _load();
-                                  }
-                                },
+                                onTap: () => pick(c, selected),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: selected ? _purple.withOpacity(0.22) : Colors.white.withOpacity(0.06),
+                                    color: selected ? p.accent.withOpacity(0.2) : Colors.white.withOpacity(0.06),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: selected ? Border.all(color: _purple) : null,
+                                    border: selected ? Border.all(color: p.accent) : null,
                                   ),
                                   child: Row(
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                         decoration: BoxDecoration(
-                                          color: selected ? _purple : _purple.withOpacity(0.5),
+                                          color: selected ? p.accent : p.accent.withOpacity(0.5),
                                           borderRadius: BorderRadius.circular(10),
                                         ),
-                                        child: Text('Ch. ${_fmtNum(c.number)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        child: Text('Ch. ${_fmtNum(c.number)}',
+                                            style: TextStyle(color: p.onAccent, fontWeight: FontWeight.bold, fontSize: 12)),
                                       ),
                                       const SizedBox(width: 14),
                                       Expanded(
                                         child: Text(c.title,
-                                            style: TextStyle(color: selected ? Colors.white : Colors.white70, fontWeight: FontWeight.w600)),
+                                            style: TextStyle(
+                                                color: selected ? Colors.white : Colors.white70,
+                                                fontWeight: FontWeight.w600)),
                                       ),
                                       if (selected)
-                                        const Icon(Icons.check_circle, color: Colors.white, size: 20)
+                                        Icon(Icons.check_circle, color: p.accent, size: 20)
                                       else if (c.read)
                                         const Icon(Icons.check_circle_outline, color: Colors.white38, size: 20),
                                     ],
@@ -284,9 +305,10 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
   }
 
   void _openSettings() {
+    final p = ref.read(paletteProvider);
     showModalBottomSheet(
       context: context,
-      backgroundColor: _panelBg,
+      backgroundColor: p.panel,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Padding(
@@ -307,6 +329,8 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                   Navigator.pop(context);
                 },
               ),
+              const SizedBox(height: 8),
+              const ThemeSettingsTile(),
             ],
           ),
         ),
@@ -333,8 +357,33 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
       final target = (fraction * (_pages.length - 1)).round().clamp(0, _pages.length - 1);
       _pageController.jumpToPage(target);
     } else if (_webtoonController.hasClients) {
+      _holdAtEnd = true; // scrubbing to the bottom shouldn't instantly load the next chapter
       final max = _webtoonController.position.maxScrollExtent;
       _webtoonController.jumpTo((fraction * max).clamp(0, max));
+    }
+  }
+
+  void _jumpToStart() {
+    if (_pages.isEmpty) return;
+    _holdAtEnd = false;
+    if (_mode == _ReadMode.paged) {
+      _pageController.jumpToPage(0);
+    } else if (_webtoonController.hasClients) {
+      _webtoonController.animateTo(0, duration: const Duration(milliseconds: 350), curve: Curves.easeOut);
+    }
+  }
+
+  void _jumpToEnd() {
+    if (_pages.isEmpty) return;
+    if (_mode == _ReadMode.paged) {
+      _pageController.jumpToPage(_pages.length - 1);
+    } else if (_webtoonController.hasClients) {
+      _holdAtEnd = true;
+      _webtoonController.animateTo(
+        _webtoonController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -361,12 +410,13 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _p = ref.watch(paletteProvider);
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           if (_loading)
-            const Center(child: CircularProgressIndicator())
+            Center(child: CircularProgressIndicator(color: _p.accent))
           else if (_pages.isEmpty)
             const Center(child: Text('No pages found', style: TextStyle(color: Colors.white)))
           else
@@ -408,7 +458,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.circle_outlined, color: Colors.white70, size: 18),
+                          Icon(Icons.circle_outlined, color: _p.accent, size: 18),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -431,7 +481,6 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Distinct settings glyph — not the sliders icon, which reads as a hamburger at a glance.
                 _circleButton(Icons.settings_outlined, _openSettings),
               ],
             ),
@@ -468,7 +517,8 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(14)),
-              child: Text('${_currentPage + 1} / ${_pages.length}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+              child: Text('${_currentPage + 1} / ${_pages.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 13)),
             ),
           ),
         ),
@@ -476,15 +526,28 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
     );
   }
 
-  /// Scrubber (top) and zoom controls (below it) — stacked as one column on
-  /// the right edge, per the requested repositioning.
+  Widget _edgeButton(IconData icon, String tooltip, VoidCallback onTap) {
+    return Material(
+      color: Colors.black.withOpacity(0.65),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Tooltip(
+          message: tooltip,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _rightSideControls() {
+    final p = _p;
     final total = _pages.length;
-    final current = _mode == _ReadMode.paged
-        ? _currentPage
-        : (_webtoonController.hasClients && _webtoonController.position.maxScrollExtent > 0
-            ? ((_webtoonController.offset / _webtoonController.position.maxScrollExtent) * (total - 1)).round()
-            : 0);
+    final current = _mode == _ReadMode.paged ? _currentPage : _webtoonIndex;
 
     return AnimatedOpacity(
       opacity: _controlsVisible ? 1 : 0,
@@ -496,118 +559,125 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             alignment: Alignment.centerRight,
             child: Padding(
               padding: const EdgeInsets.only(right: 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Wider, easier-to-grab scrubber track.
-                  Container(
-                    width: 48,
-                    height: MediaQuery.of(context).size.height * 0.42,
-                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.65), borderRadius: BorderRadius.circular(24)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Column(
-                      children: [
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                          icon: const Icon(Icons.bookmark_border, color: Colors.white70, size: 16),
-                          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Bookmarks are coming soon.')),
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _edgeButton(Icons.vertical_align_top, 'Scroll to start', _jumpToStart),
+                    const SizedBox(height: 8),
+                    // Scrubber: 60px wide, entire capsule is draggable.
+                    Container(
+                      width: 60,
+                      height: MediaQuery.of(context).size.height * 0.34,
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(30)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        children: [
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            icon: const Icon(Icons.bookmark_border, color: Colors.white70, size: 17),
+                            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Bookmarks are coming soon.')),
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                          icon: const Icon(Icons.keyboard_arrow_up, color: Colors.white70, size: 18),
-                          onPressed: () => _stepPage(-1),
-                        ),
-                        Text('${current + 1}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final fraction = total > 1 ? current / (total - 1) : 0.0;
-                              return GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onVerticalDragUpdate: (details) {
-                                  final f = (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
-                                  _jumpToFraction(f);
-                                },
-                                onTapUp: (details) {
-                                  final f = (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
-                                  _jumpToFraction(f);
-                                },
-                                child: Stack(
-                                  alignment: Alignment.topCenter,
-                                  children: [
-                                    Positioned(
-                                      top: 2,
-                                      bottom: 2,
-                                      child: Container(
-                                        width: 8,
-                                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(4)),
-                                      ),
-                                    ),
-                                    Column(
-                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                      children: List.generate(
-                                        10,
-                                        (i) => Container(
-                                          width: 5,
-                                          height: 5,
-                                          decoration: const BoxDecoration(color: Colors.white38, shape: BoxShape.circle),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            icon: const Icon(Icons.keyboard_arrow_up, color: Colors.white70, size: 20),
+                            onPressed: () => _stepPage(-1),
+                          ),
+                          Text('${current + 1}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                          const SizedBox(height: 4),
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final fraction = total > 1 ? current / (total - 1) : 0.0;
+                                double toFraction(double dy) => (dy / constraints.maxHeight).clamp(0.0, 1.0);
+                                return GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onVerticalDragDown: (d) => _jumpToFraction(toFraction(d.localPosition.dy)),
+                                  onVerticalDragUpdate: (d) => _jumpToFraction(toFraction(d.localPosition.dy)),
+                                  onTapDown: (d) => _jumpToFraction(toFraction(d.localPosition.dy)),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    alignment: Alignment.topCenter,
+                                    children: [
+                                      Positioned(
+                                        top: 2,
+                                        bottom: 2,
+                                        child: Container(
+                                          width: 12,
+                                          decoration: BoxDecoration(
+                                              color: Colors.white24, borderRadius: BorderRadius.circular(6)),
                                         ),
                                       ),
-                                    ),
-                                    Positioned(
-                                      top: (constraints.maxHeight - 30) * fraction,
-                                      child: Container(
-                                        width: 30,
-                                        height: 30,
-                                        decoration: BoxDecoration(
-                                          color: Colors.redAccent,
-                                          shape: BoxShape.circle,
-                                          boxShadow: [BoxShadow(color: Colors.redAccent.withOpacity(0.5), blurRadius: 6)],
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                        children: List.generate(
+                                          10,
+                                          (i) => Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: const BoxDecoration(color: Colors.white38, shape: BoxShape.circle),
+                                          ),
                                         ),
-                                        child: const Icon(Icons.lock, color: Colors.white, size: 14),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+                                      Positioned(
+                                        top: (constraints.maxHeight - 36) * fraction,
+                                        child: Container(
+                                          width: 36,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: p.accent,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [BoxShadow(color: p.accent.withOpacity(0.5), blurRadius: 8)],
+                                          ),
+                                          child: Icon(Icons.lock, color: p.onAccent, size: 16),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('$total', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 18),
-                          onPressed: () => _stepPage(1),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text('$total', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 20),
+                            onPressed: () => _stepPage(1),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  // Zoom cluster, now below the scrubber instead of overlapping it.
-                  Container(
-                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.65), borderRadius: BorderRadius.circular(24)),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(icon: const Icon(Icons.add, color: Colors.white, size: 20), onPressed: () => _zoomBy(0.25)),
-                        IconButton(
-                          icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
-                          tooltip: 'Skip to next chapter',
-                          onPressed: () => _autoAdvance(),
-                        ),
-                        IconButton(icon: const Icon(Icons.remove, color: Colors.white, size: 20), onPressed: () => _zoomBy(-0.25)),
-                      ],
+                    const SizedBox(height: 8),
+                    _edgeButton(Icons.vertical_align_bottom, 'Scroll to end', _jumpToEnd),
+                    const SizedBox(height: 12),
+                    Container(
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(24)),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                              icon: const Icon(Icons.add, color: Colors.white, size: 20), onPressed: () => _zoomBy(0.25)),
+                          IconButton(
+                            icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                            tooltip: 'Skip to next chapter',
+                            onPressed: () => _autoAdvance(),
+                          ),
+                          IconButton(
+                              icon: const Icon(Icons.remove, color: Colors.white, size: 20),
+                              onPressed: () => _zoomBy(-0.25)),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -628,7 +698,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             child: Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Material(
-                color: Colors.black.withOpacity(0.65),
+                color: Colors.black.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(24),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(24),
