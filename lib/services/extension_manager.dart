@@ -106,7 +106,6 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
     try {
       final map = Map<String, dynamic>.from(raw);
       
-      // Map official Keiyoshi repo fields to Kaimono manifest fields
       if (map.containsKey('pkg') && !map.containsKey('id')) {
         map['id'] = map['pkg'];
       }
@@ -157,10 +156,13 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
 
   static const _installedKey = 'installed_sources';
   static const _reposKey = 'custom_repos';
-  static const defaultRepoUrl =
-      'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json';
+  
+  static const List<String> defaultRepoUrls = [
+    'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
+    'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json',
+  ];
 
-  final List<ExtensionRepo> _repos = [ExtensionRepo(defaultRepoUrl)];
+  final List<ExtensionRepo> _repos = defaultRepoUrls.map((url) => ExtensionRepo(url)).toList();
   List<ExtensionRepo> get repos => _repos;
 
   final Map<String, String> repoErrors = {};
@@ -254,7 +256,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
 
   Future<void> _persistRepos() async {
     final prefs = await SharedPreferences.getInstance();
-    final custom = _repos.where((r) => r.url != defaultRepoUrl).map((r) => r.url).toList();
+    final custom = _repos.where((r) => !defaultRepoUrls.contains(r.url)).map((r) => r.url).toList();
     await prefs.setStringList(_reposKey, custom);
   }
 
