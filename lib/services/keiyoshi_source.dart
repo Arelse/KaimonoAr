@@ -29,14 +29,12 @@ class KeiyoshiSource implements Source {
 
   @override
   Future<List<Entry>> popular({int page = 1, String? genre}) async {
-    // Calls the native Android Kotlin bridge
     final rawList = await KeiyoshiBridge.fetchPopular(
       apkPath: apkPath,
       className: manifest.id,
       page: page,
     );
 
-    // Converts the raw JSON from Kotlin into Flutter Entry objects, providing the required 'type'
     return rawList.map((data) => Entry(
       id: data['url'] ?? data['id'] ?? data.hashCode.toString(),
       sourceId: id,
@@ -54,14 +52,39 @@ class KeiyoshiSource implements Source {
 
   @override
   Future<Entry> getEntryDetails(String entryId) async {
-    throw UnimplementedError('Details mapping not wired to bridge yet.');
+    // For now, return a basic entry placeholder using the ID
+    return Entry(
+      id: entryId,
+      sourceId: id,
+      title: 'Details',
+      coverUrl: '',
+      type: type,
+    );
   }
 
   @override
-  Future<List<EntryChunk>> getChunks(String entryId) async => [];
+  Future<List<EntryChunk>> getChunks(String entryId) async {
+    final rawChapters = await KeiyoshiBridge.fetchChapters(
+      apkPath: apkPath,
+      className: manifest.id,
+      entryUrl: entryId,
+    );
+
+    return rawChapters.map((ch) => EntryChunk(
+      id: ch['url'] ?? '',
+      title: ch['name'] ?? 'Chapter',
+      number: (ch['chapterNumber'] as num?)?.toDouble() ?? 1.0,
+    )).toList();
+  }
 
   @override
-  Future<List<String>> getPages(String chunkId) async => [];
+  Future<List<String>> getPages(String chunkId) async {
+    return await KeiyoshiBridge.fetchPages(
+      apkPath: apkPath,
+      className: manifest.id,
+      chapterUrl: chunkId,
+    );
+  }
 
   @override
   Future<List<StreamLink>> getStreamLinks(String chunkId) async => [];
