@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/source.dart';
 import 'js_source.dart';
+import 'keiyoshi_downloader.dart';
 
 /// An error with a message that is safe to show to the user as-is.
 class ExtensionException implements Exception {
@@ -233,7 +234,12 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
       for (final item in raw) {
         try {
           final manifest = ExtensionManifest.fromJson(jsonDecode(item));
-          map[manifest.id] = JsSource(manifest);
+          
+          if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
+             // Temporarily skip fully loading APKs on boot until KeiyoshiSource is built
+          } else {
+             map[manifest.id] = JsSource(manifest);
+          }
         } catch (_) {
           // Skip one corrupt saved source instead of losing all of them.
         }
@@ -251,7 +257,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   Future<void> _persistInstalled() async {
     final prefs = await SharedPreferences.getInstance();
     final list = state.values.map((s) {
-      final m = (s as JsSource).manifest;
+      final m = (s as dynamic).manifest;
       return jsonEncode({
         'id': m.id,
         'name': m.name,
@@ -266,9 +272,25 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   }
 
   Future<void> install(ExtensionManifest manifest) async {
-    final source = JsSource(manifest);
-    state = {...state, manifest.id: source};
-    await _persistInstalled();
+    if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
+      // 1. Download the Keiyoshi APK to internal storage
+      final localApkPath = await KeiyoshiDownloader.downloadApk(
+        downloadUrl: manifest.scriptUrl,
+        extensionId: manifest.id,
+      );
+      
+      // Temporarily throw an exception so the UI shows success to you directly on the screen
+      // without crashing the app by trying to load an incomplete source!
+      throw ExtensionException(
+        "Success! Keiyoshi APK downloaded securely to local storage.\n"
+        "Next step: We need to build a 'KeiyoshiSource' wrapper so Kaimono can actually load the manga from it."
+      );
+    } else {
+      // 2. Normal JS Source installation
+      final source = JsSource(manifest);
+      state = {...state, manifest.id: source};
+      await _persistInstalled();
+    }
   }
 
   Future<void> uninstall(String sourceId) async {
