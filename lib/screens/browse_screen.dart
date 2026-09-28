@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/content_type.dart';
+import '../services/content_filter.dart';
 import '../services/extension_manager.dart';
 import '../widgets/entry_grid.dart';
 import 'entry_detail_screen.dart';
@@ -16,7 +17,11 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sources = ref.watch(extensionManagerProvider).values.where((s) => s.type == _type).toList();
+    final showNsfw = ref.watch(showNsfwProvider);
+    final nsfwIds = ref.watch(nsfwSourcesProvider);
+    final allOfType = ref.watch(extensionManagerProvider).values.where((s) => s.type == _type).toList();
+    final sources = allOfType.where((s) => showNsfw || !nsfwIds.contains(s.id)).toList();
+    final hiddenCount = allOfType.length - sources.length;
 
     return Scaffold(
       appBar: AppBar(
@@ -40,7 +45,9 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'No ${_type.label} sources installed.\nAdd some from the Sources tab.',
+                  hiddenCount > 0
+                      ? '$hiddenCount 18+ ${_type.label} source${hiddenCount == 1 ? ' is' : 's are'} hidden.\nTurn them on in Settings → Content.'
+                      : 'No ${_type.label} sources installed.\nAdd some from the Sources tab.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -52,7 +59,7 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                 return ListTile(
                   leading: CircleAvatar(backgroundImage: s.iconUrl.isNotEmpty ? NetworkImage(s.iconUrl) : null),
                   title: Text(s.name),
-                  subtitle: Text(s.lang.toUpperCase()),
+                  subtitle: Text(nsfwIds.contains(s.id) ? '${s.lang.toUpperCase()} · 18+' : s.lang.toUpperCase()),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(
                     context,
