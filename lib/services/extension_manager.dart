@@ -122,10 +122,17 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
       if (map.containsKey('pkg') && !map.containsKey('id')) {
         map['id'] = map['pkg'];
       }
+      
+      // PRESERVE ENTRYPOINT CLASS NAME (CRITICAL FOR DEXCLASSLOADER)
+      if (map.containsKey('class') && !map.containsKey('className')) {
+        map['className'] = map['class'];
+      }
+
       if (map.containsKey('apk') && !map.containsKey('script')) {
         String apkPath = map['apk'];
         map['script'] = base.resolve(apkPath.startsWith('http') ? apkPath : 'apk/$apkPath').toString();
       }
+      
       if (map.containsKey('icon') && map['icon'] is String) {
         String iconPath = map['icon'];
         if (!iconPath.startsWith('http')) {
@@ -147,12 +154,6 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
 
       map['type'] ??= 'manga';
 
-      for (final key in ['script', 'icon']) {
-        final v = map[key];
-        if (v is String && v.isNotEmpty && !v.contains('://')) {
-          map[key] = base.resolve(v).toString();
-        }
-      }
       out.add(ExtensionManifest.fromJson(map));
     } catch (e) {
       firstError ??= e;
@@ -268,7 +269,8 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
       final appDir = await getApplicationSupportDirectory();
       for (final item in raw) {
         try {
-          final manifest = ExtensionManifest.fromJson(jsonDecode(item));
+          final decodedMap = jsonDecode(item);
+          final manifest = ExtensionManifest.fromJson(decodedMap);
           
           if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
              final localApkPath = '${appDir.path}/keiyoshi_extensions/${manifest.id}.apk';
@@ -301,6 +303,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
         'icon': m.iconUrl,
         'script': m.scriptUrl,
         'version': m.version,
+        'class': m.className, // PERSIST CLASS NAME CORRECTLY
       });
     }).toList();
     await prefs.setStringList(_installedKey, list);
