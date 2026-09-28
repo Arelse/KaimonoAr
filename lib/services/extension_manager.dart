@@ -117,6 +117,15 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
         String iconPath = map['icon'];
         map['icon'] = base.resolve(iconPath.startsWith('http') ? iconPath : 'icon/$iconPath').toString();
       }
+
+      if (map['version'] != null) {
+        map['version'] = int.tryParse(map['version'].toString()) ?? 1;
+      } else if (map['versionCode'] != null) {
+        map['version'] = int.tryParse(map['versionCode'].toString()) ?? 1;
+      } else {
+        map['version'] = 1;
+      }
+
       map['type'] ??= 'manga';
 
       for (final key in ['script', 'icon']) {
