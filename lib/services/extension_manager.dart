@@ -120,13 +120,12 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
         continue;
       }
 
-      if (className.isNotEmpty) {
-        map['id'] = className;
-        map['className'] = className;
-      } else if (pkg.isNotEmpty) {
-        map['id'] = pkg;
-        map['className'] = pkg;
-      }
+      // CRITICAL: Ensure fully qualified Java class name is used as the manifest ID/pkg 
+      // so DexClassLoader can resolve it instead of throwing ClassNotFoundException.
+      final targetClass = className.isNotEmpty ? className : pkg;
+      map['id'] = targetClass;
+      map['pkg'] = targetClass;
+      map['className'] = targetClass;
 
       if (map.containsKey('apk') && !map.containsKey('script')) {
         String apkPath = map['apk'];
@@ -184,8 +183,8 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   static const _installedKey = 'installed_sources';
   static const _reposKey = 'custom_repos';
   
+  // Keiyoshi repository mirror only (sample repo removed)
   static const List<String> defaultRepoUrls = [
-    'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
     'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json',
   ];
 
@@ -271,7 +270,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
           final manifest = ExtensionManifest.fromJson(decodedMap);
           
           if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-             final storageId = manifest.id.split('.').last;
+             final storageId = manifest.id.split('.').reversed.skip(1).first.toLowerCase();
              final localApkPath = '${appDir.path}/keiyoshi_extensions/$storageId.apk';
              map[manifest.id] = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
           } else {
@@ -296,6 +295,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
       final typeString = m.type.toString().split('.').last;
       return jsonEncode({
         'id': m.id,
+        'pkg': m.pkg ?? m.id,
         'name': m.name,
         'lang': m.lang,
         'type': typeString,
@@ -311,7 +311,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   Future<void> install(ExtensionManifest manifest) async {
     try {
       if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-        final storageId = manifest.id.split('.').last;
+        final storageId = manifest.id.split('.').reversed.skip(1).first.toLowerCase();
         final localApkPath = await KeiyoshiDownloader.downloadApk(
           downloadUrl: manifest.scriptUrl,
           extensionId: storageId,
