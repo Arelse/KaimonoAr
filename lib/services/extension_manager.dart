@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/source.dart';
 import 'js_source.dart';
 import 'keiyoshi_downloader.dart';
 import 'keiyoshi_source.dart';
 
-/// An error with a message that is safe to show to the user as-is.
 class ExtensionException implements Exception {
   final String message;
   ExtensionException(this.message);
@@ -17,10 +16,6 @@ class ExtensionException implements Exception {
   String toString() => message;
 }
 
-/// Cleans up a URL typed by the user.
-/// - adds https:// if missing
-/// - github.com/<u>/<r>/blob/<branch>/<path>  ->  raw.githubusercontent.com/...
-/// - github.com/<u>/<r>  ->  raw.githubusercontent.com/<u>/<r>/main/index.json
 String normalizeSourceUrl(String input) {
   var u = input.trim();
   if (u.isEmpty) throw ExtensionException('Enter a URL first.');
@@ -74,9 +69,6 @@ Future<String> fetchText(String url) async {
   }
 }
 
-/// Accepts: a JSON array of sources, {"sources": [...]} (or "extensions"/"items"),
-/// or a single source object that has "id" and "script".
-/// Relative "script"/"icon" values are resolved against [baseUrl].
 List<ExtensionManifest> parseManifests(String body, String baseUrl) {
   dynamic decoded;
   try {
@@ -155,7 +147,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   final List<ExtensionRepo> _repos = [ExtensionRepo(defaultRepoUrl)];
   List<ExtensionRepo> get repos => _repos;
 
-  /// Last error per repo URL from the most recent [browseAll] call.
   final Map<String, String> repoErrors = {};
 
   Future<List<ExtensionManifest>> browseAll() async {
@@ -176,7 +167,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
 
   void _notify() => state = {...state};
 
-  /// Old API, kept so existing screens compile. Saves the repo and refreshes listeners.
   void addRepo(String url) {
     final normalized = _safeNormalize(url);
     if (normalized.isEmpty || _repos.any((r) => r.url == normalized)) return;
@@ -185,8 +175,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     _notify();
   }
 
-  /// Validates and test-fetches the repo first. Throws [ExtensionException] with a
-  /// readable message on failure. Returns how many sources the repo offers.
   Future<int> addRepoChecked(String url) async {
     final normalized = normalizeSourceUrl(url);
     if (_repos.any((r) => r.url == normalized)) {
@@ -206,8 +194,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     _notify();
   }
 
-  /// Installs every source found at [url] (a source JSON, or a JSON list of sources).
-  /// Throws [ExtensionException] with a readable message on failure.
   Future<List<ExtensionManifest>> installFromUrl(String url) async {
     final normalized = normalizeSourceUrl(url);
     if (normalized.toLowerCase().endsWith('.js')) {
@@ -233,21 +219,18 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     final raw = prefs.getStringList(_installedKey);
     final map = <String, Source>{};
     if (raw != null) {
-      final directory = await getApplicationDocumentsDirectory();
+      final tempDir = Directory.systemTemp;
       for (final item in raw) {
         try {
           final manifest = ExtensionManifest.fromJson(jsonDecode(item));
           
           if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-             // Reconstruct the local file path for the saved Keiyoshi extension
-             final localApkPath = '${directory.path}/keiyoshi_extensions/${manifest.id}.apk';
+             final localApkPath = '${tempDir.path}/keiyoshi_extensions/${manifest.id}.apk';
              map[manifest.id] = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
           } else {
              map[manifest.id] = JsSource(manifest);
           }
-        } catch (_) {
-          // Skip one corrupt saved source instead of losing all of them.
-        }
+        } catch (_) {}
       }
     }
     state = map;
@@ -278,19 +261,15 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
 
   Future<void> install(ExtensionManifest manifest) async {
     if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-      // 1. Download the Keiyoshi APK to internal storage
       final localApkPath = await KeiyoshiDownloader.downloadApk(
         downloadUrl: manifest.scriptUrl,
         extensionId: manifest.id,
       );
       
-      // 2. Mount the native Source
       final source = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
       state = {...state, manifest.id: source};
       await _persistInstalled();
-      
     } else {
-      // Normal JS Source installation
       final source = JsSource(manifest);
       state = {...state, manifest.id: source};
       await _persistInstalled();
