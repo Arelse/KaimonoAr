@@ -13,17 +13,23 @@ class ExtensionsScreen extends ConsumerStatefulWidget {
 class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
   List<ExtensionManifest> _available = [];
   bool _loading = true;
+  String _repoSig = '';
 
   @override
   void initState() {
     super.initState();
+    _repoSig = _currentRepoSig();
     _refresh();
   }
+
+  String _currentRepoSig() =>
+      ref.read(extensionManagerProvider.notifier).repos.map((r) => r.url).join('|');
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
     final manager = ref.read(extensionManagerProvider.notifier);
     final list = await manager.browseAll();
+    if (!mounted) return;
     setState(() {
       _available = list;
       _loading = false;
@@ -33,6 +39,19 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
   @override
   Widget build(BuildContext context) {
     final installed = ref.watch(extensionManagerProvider);
+
+    // When the list of repositories changes (added/removed in Settings), reload.
+    ref.listen(extensionManagerProvider, (prev, next) {
+      final sig = _currentRepoSig();
+      if (sig != _repoSig) {
+        _repoSig = sig;
+        _refresh();
+      }
+    });
+
+    final errors = ref.read(extensionManagerProvider.notifier).repoErrors;
+    final scheme = Theme.of(context).colorScheme;
+    final availableToInstall = _available.where((m) => !installed.containsKey(m.id)).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -56,8 +75,20 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                         child: const Text('Remove'),
                       ),
                     )),
+                if (errors.isNotEmpty) _sectionHeader('Repositories with problems'),
+                ...errors.entries.map((e) => Card(
+                      color: scheme.errorContainer,
+                      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      child: ListTile(
+                        leading: Icon(Icons.error_outline, color: scheme.onErrorContainer),
+                        title: Text('Could not load repository',
+                            style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.w600)),
+                        subtitle: Text('${e.key}\n${e.value}', style: TextStyle(color: scheme.onErrorContainer)),
+                        isThreeLine: true,
+                      ),
+                    )),
                 _sectionHeader('Available from repos'),
-                ..._available.where((m) => !installed.containsKey(m.id)).map((m) => ListTile(
+                ...availableToInstall.map((m) => ListTile(
                       leading: CircleAvatar(backgroundImage: m.iconUrl.isNotEmpty ? NetworkImage(m.iconUrl) : null),
                       title: Text(m.name),
                       subtitle: Text('${m.lang.toUpperCase()} · ${m.type.label} · v${m.version}'),
@@ -66,11 +97,11 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                         child: const Text('Install'),
                       ),
                     )),
-                if (_available.isEmpty)
+                if (_available.isEmpty && errors.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
-                      'No repos reachable right now.\nManage repositories from Settings, or tap + above to add a single source by URL.',
+                      'No sources found in your repositories yet.\nAdd a repository in Settings, or tap + above to add a single source by URL.',
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -84,65 +115,132 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
         child: Text(text, style: Theme.of(context).textTheme.titleSmall),
       );
 
-  /// Installs a single JS source directly from its script URL, without
-  /// needing a repo index. The extension becomes usable in Discover the
-  /// moment this dialog closes — no separate "refresh" step needed.
+  String _nameFromUrl(String url) {
+    final segs = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
+    var name = segs.isEmpty ? 'Source' : segs.last;
+    name = name.replaceAll(RegExp(r'\.(js|json)$', caseSensitive: false), '');
+    name = name.replaceAll(RegExp(r'[-_]+'), ' ').trim();
+    return name.isEmpty ? 'Source' : name;
+  }
+
+  /// Adds a source from a URL. Accepts either:
+  ///  - a script (.js) — installed as one source, or
+  ///  - a JSON file describing one or more sources.
+  /// The URL is fetched and checked first, so problems show up right here.
   void _addManualSource() {
     final nameController = TextEditingController();
     final urlController = TextEditingController();
     ContentType selectedType = ContentType.manga;
-    String lang = 'en';
+    String? error;
+    bool busy = false;
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('Add source by URL'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Source name'),
-                ),
-                TextField(
-                  controller: urlController,
-                  decoration: const InputDecoration(labelText: 'Script URL (.js)'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<ContentType>(
-                  initialValue: selectedType,
-                  decoration: const InputDecoration(labelText: 'Content type'),
-                  items: ContentType.values
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
-                      .toList(),
-                  onChanged: (v) => setDialogState(() => selectedType = v!),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                if (nameController.text.trim().isEmpty || urlController.text.trim().isEmpty) return;
-                final manifest = ExtensionManifest(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submit() async {
+            setDialogState(() {
+              busy = true;
+              error = null;
+            });
+            final manager = ref.read(extensionManagerProvider.notifier);
+            try {
+              final url = normalizeSourceUrl(urlController.text);
+              final body = await fetchText(url);
+              final head = body.trimLeft();
+              String message;
+
+              if (head.startsWith('{') || head.startsWith('[')) {
+                final manifests = parseManifests(body, url);
+                for (final m in manifests) {
+                  await manager.install(m);
+                }
+                message = 'Installed ${manifests.map((m) => m.name).join(', ')}';
+              } else if (head.startsWith('<')) {
+                throw ExtensionException(
+                    'That URL returned a web page, not a script. On GitHub, open the file, tap "Raw", and copy that link.');
+              } else {
+                final name = nameController.text.trim().isEmpty ? _nameFromUrl(url) : nameController.text.trim();
+                await manager.install(ExtensionManifest(
                   id: 'manual.${DateTime.now().millisecondsSinceEpoch}',
-                  name: nameController.text.trim(),
-                  lang: lang,
+                  name: name,
+                  lang: 'en',
                   type: selectedType,
                   iconUrl: '',
-                  scriptUrl: urlController.text.trim(),
+                  scriptUrl: url,
                   version: 1,
-                );
-                ref.read(extensionManagerProvider.notifier).install(manifest);
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Add'),
+                ));
+                message = 'Installed $name';
+              }
+
+              if (!dialogContext.mounted) return;
+              Navigator.pop(dialogContext);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+              }
+            } on ExtensionException catch (e) {
+              setDialogState(() {
+                busy = false;
+                error = e.message;
+              });
+            } catch (e) {
+              setDialogState(() {
+                busy = false;
+                error = 'Unexpected error: $e';
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Add source by URL'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: urlController,
+                    autofocus: true,
+                    keyboardType: TextInputType.url,
+                    decoration: InputDecoration(
+                      labelText: 'Script or source URL',
+                      hintText: 'https://.../source.js',
+                      errorText: error,
+                      errorMaxLines: 5,
+                    ),
+                  ),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Source name (optional)'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<ContentType>(
+                    initialValue: selectedType,
+                    decoration: const InputDecoration(labelText: 'Content type (for scripts)'),
+                    items: ContentType.values
+                        .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => selectedType = v!),
+                  ),
+                  if (busy)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: LinearProgressIndicator(),
+                    ),
+                ],
+              ),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: busy ? null : submit,
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
