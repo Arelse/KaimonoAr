@@ -127,7 +127,13 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
       }
       if (map.containsKey('icon') && map['icon'] is String) {
         String iconPath = map['icon'];
-        map['icon'] = base.resolve(iconPath.startsWith('http') ? iconPath : 'icon/$iconPath').toString();
+        if (!iconPath.startsWith('http')) {
+          if (iconPath.startsWith('icon/')) {
+            map['icon'] = base.resolve(iconPath).toString();
+          } else {
+            map['icon'] = base.resolve('icon/$iconPath').toString();
+          }
+        }
       }
 
       if (map['version'] != null) {
@@ -178,7 +184,6 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   static const _installedKey = 'installed_sources';
   static const _reposKey = 'custom_repos';
   
-  // Using a valid JSON mirror to ensure full compatibility with Kaimono's engine
   static const List<String> defaultRepoUrls = [
     'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
     'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json',
@@ -259,13 +264,13 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     final raw = prefs.getStringList(_installedKey);
     final map = <String, Source>{};
     if (raw != null) {
-      final tempDir = Directory.systemTemp;
+      final appDir = await getApplicationSupportDirectory();
       for (final item in raw) {
         try {
           final manifest = ExtensionManifest.fromJson(jsonDecode(item));
           
           if (manifest.scriptUrl.toLowerCase().endsWith('.apk')) {
-             final localApkPath = '${tempDir.path}/keiyoshi_extensions/${manifest.id}.apk';
+             final localApkPath = '${appDir.path}/keiyoshi_extensions/${manifest.id}.apk';
              map[manifest.id] = KeiyoshiSource(manifest: manifest, apkPath: localApkPath);
           } else {
              map[manifest.id] = JsSource(manifest);
