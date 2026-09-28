@@ -106,6 +106,15 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
     try {
       final map = Map<String, dynamic>.from(raw);
       
+      // Filter out non-source utility entries and app updates from the Keiyoshi repo index
+      final pkg = (map['pkg'] ?? map['id'] ?? '').toString();
+      if (pkg == 'eu.kanade.tachiyomi' || pkg.contains('tachiyomi') && !pkg.contains('.')) {
+        continue;
+      }
+      if (map['isCompanion'] == true || map['hasReadme'] == true && !map.containsKey('apk')) {
+        continue;
+      }
+
       if (map.containsKey('pkg') && !map.containsKey('id')) {
         map['id'] = map['pkg'];
       }
