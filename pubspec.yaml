@@ -1,5 +1,5 @@
 name: Kaimono
-description: A source-extensible manga / anime / novel reader (Mihon/Mangayomi-style extensions).
+description: A source-extensible manga / anime / novel reader (Mihon/Mangayomi-style extensions)
 publish_to: 'none'
 version: 0.1.0
 
@@ -16,13 +16,13 @@ dependencies:
 
   # Persistent local storage (library favorites, installed sources)
   shared_preferences: ^2.2.3
-    path_provider: ^2.1.4
-    
+  path_provider: ^2.1.4
+
   # Networking (talking to source backends / extension repos)
   dio: ^5.4.3
-  html: ^0.15.4          # for parsing HTML-based sources (cloudflare, scraping)
+  html: ^0.15.4  # for parsing HTML-based sources (cloudflare, scraping)
 
-  # JS-based source engine — this is what makes "extensions" possible
+  # JS-based source engine - this is what makes "extensions" possible
   # without needing to compile/ship native Android APKs.
   flutter_js: ^0.8.0
 
@@ -30,10 +30,10 @@ dependencies:
   webview_flutter: ^4.7.0
 
   cached_network_image: ^3.3.1
-  video_player: ^2.9.1   # for anime playback
+  video_player: ^2.9.1  # for anime playback
   chewie: ^1.8.1
 
-  # Vector icons matching the app's design mockups exactly
+  # Vector icons matching the app's design mocks exactly
   flutter_svg: ^2.0.10+1
 
 dev_dependencies:
@@ -42,3 +42,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  
