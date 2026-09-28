@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/source.dart';
 import 'js_source.dart';
 import 'keiyoshi_downloader.dart';
@@ -177,10 +179,10 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   static const _installedKey = 'installed_sources';
   static const _reposKey = 'custom_repos';
   
-  // FIXED URL: Pointing to index.json instead of index.min.json
+  // FIXED URL: Pointing to a working JSON mirror instead of Keiyoushi's broken/deprecated endpoints
   static const List<String> defaultRepoUrls = [
     'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
-    'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json',
+    'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json',
   ];
 
   final List<ExtensionRepo> _repos = defaultRepoUrls.map((url) => ExtensionRepo(url)).toList();
