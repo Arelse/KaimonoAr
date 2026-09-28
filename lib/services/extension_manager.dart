@@ -76,7 +76,7 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
   } on FormatException {
     if (body.trimLeft().startsWith('<')) {
       throw ExtensionException(
-          'That URL returned a web page, not JSON. If it is a GitHub link, use the "Raw" version of the file.');
+          'That URL returned a web page, not JSON. Use the raw GitHub URL of the index file.');
     }
     throw ExtensionException('The response is not valid JSON.');
   }
@@ -85,14 +85,13 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
   if (decoded is List) {
     items = decoded;
   } else if (decoded is Map) {
-    final nested = decoded['sources'] ?? decoded['extensions'] ?? decoded['items'];
+    final nested = decoded['sources'] ?? decoded['extensions'] ?? decoded['items'] ?? decoded['repo'];
     if (nested is List) {
       items = nested;
     } else if (decoded.containsKey('id') && decoded.containsKey('script')) {
       items = [decoded];
     } else {
-      throw ExtensionException(
-          'The JSON is valid but has no source list. Expected an array, an object with "sources", or a single source with "id" and "script".');
+      throw ExtensionException('The JSON is valid but has no recognizable source list.');
     }
   } else {
     throw ExtensionException('Unexpected JSON format.');
@@ -101,10 +100,26 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
   final base = Uri.parse(baseUrl);
   final out = <ExtensionManifest>[];
   Object? firstError;
+
   for (final raw in items) {
     if (raw is! Map) continue;
     try {
       final map = Map<String, dynamic>.from(raw);
+      
+      // Map official Keiyoshi repo fields to Kaimono manifest fields
+      if (map.containsKey('pkg') && !map.containsKey('id')) {
+        map['id'] = map['pkg'];
+      }
+      if (map.containsKey('apk') && !map.containsKey('script')) {
+        String apkPath = map['apk'];
+        map['script'] = base.resolve(apkPath.startsWith('http') ? apkPath : 'apk/$apkPath').toString();
+      }
+      if (map.containsKey('icon') && map['icon'] is String) {
+        String iconPath = map['icon'];
+        map['icon'] = base.resolve(iconPath.startsWith('http') ? iconPath : 'icon/$iconPath').toString();
+      }
+      map['type'] ??= 'manga';
+
       for (final key in ['script', 'icon']) {
         final v = map[key];
         if (v is String && v.isNotEmpty && !v.contains('://')) {
@@ -116,9 +131,10 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
       firstError ??= e;
     }
   }
+
   if (out.isEmpty) {
     throw ExtensionException(firstError == null
-        ? 'No sources found in that file.'
+        ? 'No sources found in that repository.'
         : 'Found entries but none were valid sources ($firstError).');
   }
   return out;
@@ -198,7 +214,7 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
     final normalized = normalizeSourceUrl(url);
     if (normalized.toLowerCase().endsWith('.js')) {
       throw ExtensionException(
-          'That URL is a script, not a source description. Use the URL of the JSON file that lists id, name, lang, type and script.');
+          'That URL is a script, not a source description. Use the URL of the JSON file that lists sources.');
     }
     final body = await fetchText(normalized);
     final manifests = parseManifests(body, normalized);
