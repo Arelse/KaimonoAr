@@ -112,7 +112,32 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                       title: Text(m.name),
                       subtitle: Text('${m.lang.toUpperCase()} · ${m.type.label} · v${m.version}'),
                       trailing: FilledButton(
-                        onPressed: () => ref.read(extensionManagerProvider.notifier).install(m),
+                        // UPDATED: Async try-catch to properly handle and display installation errors
+                        onPressed: () async {
+                          try {
+                            // Show a temporary snackbar so the user knows the download started
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Downloading ${m.name}...'), duration: const Duration(seconds: 1)),
+                            );
+                            
+                            await ref.read(extensionManagerProvider.notifier).install(m);
+                            
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Installed ${m.name}')),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(e.toString()), 
+                                  backgroundColor: scheme.error,
+                                ),
+                              );
+                            }
+                          }
+                        },
                         child: const Text('Install'),
                       ),
                     )),
@@ -142,10 +167,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
     return name.isEmpty ? 'Source' : name;
   }
 
-  /// Adds a source from a URL. Accepts either:
-  ///  - a script (.js) — installed as one source, or
-  ///  - a JSON file describing one or more sources.
-  /// The URL is fetched and checked first, so problems show up right here.
   void _addManualSource() {
     final nameController = TextEditingController();
     final urlController = TextEditingController();
