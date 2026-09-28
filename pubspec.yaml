@@ -16,6 +16,8 @@ dependencies:
 
   # Persistent local storage (library favorites, installed sources)
   shared_preferences: ^2.2.3
+    path_provider: ^2.1.4
+    
 
   # Networking (talking to source backends / extension repos)
   dio: ^5.4.3
