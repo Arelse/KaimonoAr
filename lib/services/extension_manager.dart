@@ -180,11 +180,11 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   static const _reposKey = 'custom_repos';
   
   // FIXED URL: Pointing to a working JSON mirror instead of Keiyoushi's broken/deprecated endpoints
-  static const List<String> defaultRepoUrls = [
+    static const List<String> defaultRepoUrls = [
     'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
-    'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json',
+    'https://raw.githubusercontent.com/BBlackBunny/Tachiyomi-extensions/repo/index.min.json', // Active JSON mirror for Keiyoushi
   ];
-
+  
   final List<ExtensionRepo> _repos = defaultRepoUrls.map((url) => ExtensionRepo(url)).toList();
   List<ExtensionRepo> get repos => _repos;
 
