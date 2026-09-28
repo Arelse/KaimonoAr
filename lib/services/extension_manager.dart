@@ -106,13 +106,14 @@ List<ExtensionManifest> parseManifests(String body, String baseUrl) {
     try {
       final map = Map<String, dynamic>.from(raw);
       
-      // Filter out non-source utility entries, app updates, and announcements
+      // PRECISE FILTER: Only skip the core app updates, NOT the extensions namespace
       final name = (map['name'] ?? '').toString().toLowerCase();
       final pkg = (map['pkg'] ?? map['id'] ?? '').toString().toLowerCase();
-      if (name.contains('update to') || name.contains('outdated app') || pkg.contains('tachiyomi') || pkg == 'eu.kanade.tachiyomi') {
+      
+      if (pkg == 'eu.kanade.tachiyomi' || name.contains('update to') || name.contains('outdated app')) {
         continue;
       }
-      if (map['isCompanion'] == true || (map['hasReadme'] == true && !map.containsKey('apk'))) {
+      if (map['isCompanion'] == true) {
         continue;
       }
 
@@ -176,9 +177,10 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
   static const _installedKey = 'installed_sources';
   static const _reposKey = 'custom_repos';
   
+  // FIXED URL: Pointing to index.json instead of index.min.json
   static const List<String> defaultRepoUrls = [
     'https://raw.githubusercontent.com/Arelse/Kaimono/main/assets/sample_repo/index.json',
-    'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json',
+    'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json',
   ];
 
   final List<ExtensionRepo> _repos = defaultRepoUrls.map((url) => ExtensionRepo(url)).toList();
@@ -328,4 +330,3 @@ class ExtensionManager extends StateNotifier<Map<String, Source>> {
 
 final extensionManagerProvider =
     StateNotifierProvider<ExtensionManager, Map<String, Source>>((ref) => ExtensionManager());
-
