@@ -11,6 +11,7 @@ import '../services/category_manager.dart';
 import '../services/extension_manager.dart';
 import '../services/library_manager.dart';
 import '../theme/app_palette.dart';
+import 'browse_screen.dart';
 import 'manga_reader_screen.dart';
 import 'novel_reader_screen.dart';
 import 'player_screen.dart';
@@ -337,8 +338,12 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied "$tag"')));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tag search will work once the Discover screen is updated.')),
+      openTagSearch(
+        context,
+        sourceId: widget.sourceId,
+        type: widget.entry.type,
+        tag: tag,
+        global: choice == 'global',
       );
     }
   }
