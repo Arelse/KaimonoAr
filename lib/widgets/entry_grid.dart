@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../services/engine_image.dart';
 import '../models/entry.dart';
 import '../services/library_manager.dart';
 
@@ -55,7 +55,7 @@ class EntryGrid extends ConsumerWidget {
                     fit: StackFit.expand,
                     children: [
                       if (e.coverUrl != null && e.coverUrl!.isNotEmpty)
-                        CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
+                        SourceImage(url: e.coverUrl!, fit: BoxFit.cover)
                       else
                         Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
                       if (saved)
