@@ -694,7 +694,7 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
             if (e.coverUrl != null)
               ImageFiltered(
                 imageFilter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                child: CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover),
+                child: SourceImage(url: e.coverUrl!, fit: BoxFit.cover),
               ),
             Container(
               decoration: BoxDecoration(
