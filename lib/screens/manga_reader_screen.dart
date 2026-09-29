@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../services/engine_image.dart';
 import '../models/entry.dart';
 import '../services/extension_manager.dart';
 import '../theme/app_palette.dart';
@@ -758,8 +758,8 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
           itemBuilder: (context, i) => InteractiveViewer(
             transformationController: i == _currentPage ? _transformCtrl : null,
             maxScale: 4,
-            child: CachedNetworkImage(
-              imageUrl: _pages[i],
+            child: SourceImage(
+              url: _pages[i],
               fit: BoxFit.contain,
               width: double.infinity,
               placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
@@ -777,12 +777,12 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
       child: ListView.builder(
         controller: _webtoonController,
         itemCount: _pages.length,
-        itemBuilder: (context, i) => CachedNetworkImage(
-          imageUrl: _pages[i],
-          fit: BoxFit.fitWidth,
-          width: double.infinity,
-          placeholder: (_, __) => const SizedBox(height: 300, child: Center(child: CircularProgressIndicator())),
-          errorWidget: (_, __, ___) => const SizedBox(height: 100, child: Icon(Icons.broken_image, color: Colors.white38)),
+      itemBuilder: (context, i) => SourceImage(
+        url: _pages[i],
+        fit: BoxFit.fitWidth,
+        width: double.infinity,
+        placeholder: (_, __) => const SizedBox(height: 300, child: Center(child: CircularProgressIndicator())),
+        errorWidget: (_, __, ___) => const SizedBox(height: 100, child: Icon(Icons.broken_image, color: Colors.white38)),
         ),
       ),
     );
