@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../services/engine_image.dart';
 import '../models/content_type.dart';
 import '../models/entry.dart';
 import '../services/category_manager.dart';
@@ -446,7 +446,7 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
                             border: Border.all(color: Colors.white10),
                           ),
                           child: e.coverUrl != null
-                              ? CachedNetworkImage(imageUrl: e.coverUrl!, fit: BoxFit.cover)
+                              ? SourceImage(url: e.coverUrl!, fit: BoxFit.cover)
                               : Container(color: p.surface),
                         ),
                         const SizedBox(width: 16),
