@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/content_type.dart';
 import '../services/extension_manager.dart';
 import '../services/js_source.dart';
-import '../services/keiyoshi_bridge.dart';
 
 class ExtensionsScreen extends ConsumerStatefulWidget {
   const ExtensionsScreen({super.key});
@@ -37,20 +36,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
     });
   }
 
-  Future<void> testExtensionBridge() async {
-    try {
-      print("Testing Keiyoshi Bridge...");
-      // Sends a fake APK path to the native side to see if they can talk
-      final result = await KeiyoshiBridge.fetchPopular(
-        apkPath: '/storage/emulated/0/Download/test_extension.apk', 
-        className: 'eu.kanade.tachiyomi.extension.en.test.TestExtension',
-      );
-      print("Success: $result");
-    } catch (e) {
-      print("Bridge Connected, but failed to load extension: $e");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final installed = ref.watch(extensionManagerProvider);
@@ -75,10 +60,6 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
           IconButton(icon: const Icon(Icons.add), tooltip: 'Add source by URL', onPressed: _addManualSource),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: testExtensionBridge,
-        child: const Icon(Icons.bug_report),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -112,10 +93,8 @@ class _ExtensionsScreenState extends ConsumerState<ExtensionsScreen> {
                       title: Text(m.name),
                       subtitle: Text('${m.lang.toUpperCase()} · ${m.type.label} · v${m.version}'),
                       trailing: FilledButton(
-                        // UPDATED: Async try-catch to properly handle and display installation errors
                         onPressed: () async {
                           try {
-                            // Show a temporary snackbar so the user knows the download started
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Downloading ${m.name}...'), duration: const Duration(seconds: 1)),
                             );
